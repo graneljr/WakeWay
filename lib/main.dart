@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-
+import 'package:wakeway/core/database/app_database.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens.dart';
 import 'ui.dart';
 import 'wakeway_controller.dart';
@@ -11,12 +12,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final controller = WakeWayController();
   await controller.initialize();
+  await SupabaseService.initialize();
+  await dotenv.load(fileName: '.env');
   runApp(WakeWayApp(controller: controller));
 }
 
 class WakeWayApp extends StatelessWidget {
   const WakeWayApp({super.key, required this.controller});
-
   final WakeWayController controller;
 
   @override

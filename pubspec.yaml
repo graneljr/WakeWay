@@ -45,6 +45,10 @@ dependencies:
   flutter_riverpod: ^3.4.3
   connectivity_plus: ^7.3.1
   permission_handler: ^13.0.2
+  supabase_flutter: ^2.18.3
+  flutter_dotenv: ^6.0.1
+  cryptography: ^2.9.0
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +75,7 @@ flutter:
   assets:
     - assets/audio/wake_alarm.wav
     - assets/audio/classic_alarm.wav
+    - .env
 
   # To add assets to your application, add an assets section, like this:
   # assets:
