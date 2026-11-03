@@ -1,8 +1,8 @@
 import 'package:wakeway/core/database/app_database.dart';
 import 'package:wakeway/core/security/password_hasher.dart';
 import 'package:wakeway/features/auth/models/user.dart';
-class Authentication {
-  static Future<String?> createAccount(UserModel userModel) async {
+class   AuthenticationRepository {
+   Future<String?> createAccount(UserModel userModel) async {
     try {
       if (userModel.password == null || userModel.password!.isEmpty) {
         return 'Password cannot be empty';
@@ -17,7 +17,7 @@ class Authentication {
 
       await SupabaseService.client.from("users").insert(dataToInsert);
 
-      return null;
+      return "User registered successfully";
     } catch (e) {
       return e.toString();
     }

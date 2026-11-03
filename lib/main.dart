@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:wakeway/core/database/app_database.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:wakeway/features/auth/views/register.dart';
+import 'package:wakeway/features/auth/viewmodels/authentication.dart';
+
 import 'screens.dart';
 import 'ui.dart';
 import 'wakeway_controller.dart';
@@ -107,14 +110,14 @@ class _SplashScreenState extends State<SplashScreen>
     _scale = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
-    _timer = Timer(const Duration(milliseconds: 1850), _openHome);
+    _timer = Timer(const Duration(milliseconds: 1850), _openRegister);
   }
 
-  void _openHome() {
+  void _openRegister() {
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => HomeShell(controller: widget.controller),
+        builder: (_) => RegisterScreen(controller: Authentication()),
       ),
     );
   }
@@ -163,7 +166,7 @@ class _SplashScreenState extends State<SplashScreen>
             bottom: 40,
             child: Center(
               child: TextButton(
-                onPressed: _openHome,
+                onPressed: _openRegister,
                 child: const Text('Get started'),
               ),
             ),
