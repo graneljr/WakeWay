@@ -8,14 +8,14 @@ class Authentication extends ChangeNotifier {
   String _email = '';
   String _password = '';
   bool _isLoading = false;
-  String? _errorMessage;
+ Map<String, dynamic>? _errorMessage;
 
   // 2. Public Getters (Exposed to the View layer safely)
   String get name => _name;
   String get email => _email;
   String get password => _password;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
+  Map<String, dynamic>? get errorMessage => _errorMessage;
 
   // 3. UI State Setters
   void updateName(String value) {
@@ -33,17 +33,16 @@ class Authentication extends ChangeNotifier {
     _clearError();
   }
 
-  // 4. Core Business Logic (Async Registration)
-  Future<bool> registerAccount() async {
+  Future<void> registerAccount() async {
     // Basic Client-side Validation Checks
     if (_name.isEmpty || _email.isEmpty || _password.isEmpty) {
-      _setErrorMessage('Please fill out all required fields.');
-      return false;
+      _setErrorMessage({'status': 400, 'message': 'Please fill out all required fields.'});
+      return;
     }
 
     if (_password.length < 6) {
-      _setErrorMessage('Password must be at least 6 characters long.');
-      return false;
+      _setErrorMessage({'status': 400, 'message': 'Password must be at least 6 characters long.'});
+      return;
     }
 
     // Set Loading State
@@ -57,30 +56,46 @@ class Authentication extends ChangeNotifier {
         password: _password,
       );
       final result = await _authRepository.createAccount(userModel);
-      if (result != 'User registered successfully') {
-        _setErrorMessage(
-          result ?? 'Unable to create your account. Please try again.',
-        );
-        return false;
-      }
+      await Future.delayed(const Duration(seconds: 2));
 
       _clearForm();
-      return true;
     } catch (error) {
-      _setErrorMessage(error.toString());
-      return false;
+      _setErrorMessage({'status': 500, 'message': error.toString()});
     } finally {
       _setLoading(false);
     }
   }
 
+  Future<void> login() async {
+    if (_email.isEmpty || _password.isEmpty) {
+      _setErrorMessage({'status': 400, 'message': 'Please fill out all required fields.'});
+      return;
+    }
+
+    _setLoading(true);
+    _setErrorMessage(null);
+
+   try {
+  _setLoading(true); // Optional: ensure your loading state starts
+
+  // 1. Await the response map (which contains your status and data/message)
+  final Map<String, dynamic>?result = await _authRepository.loginAccount(_email, _password);
+  await Future.delayed(const Duration(seconds: 2));
+  _setErrorMessage(result);
+} catch (error) {
+  _setErrorMessage({'status': 500, 'message': 'System error: Could not connect to server.'});
+} finally {
+  _setLoading(false);
+}
+
+  }
   // 5. Helper Methods (Internal State Manipulation)
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners(); // Forces UI to refresh (e.g., swapping a button with a circular spinner)
   }
 
-  void _setErrorMessage(String? message) {
+  void _setErrorMessage(Map<String, dynamic>? message) {
     _errorMessage = message;
     notifyListeners();
   }
@@ -102,5 +117,7 @@ class Authentication extends ChangeNotifier {
   // Simulated logout function matching your earlier view snippet
   void logout() {
     _clearForm();
+    print("User logged out");
+    notifyListeners();
   }
 }

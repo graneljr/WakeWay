@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wakeway/features/auth/viewmodels/authentication.dart';
+import 'package:wakeway/features/auth/views/login.dart';
 import 'package:wakeway/ui.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -33,22 +34,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final registered = await _auth.registerAccount();
+    await _auth.registerAccount();
     if (!mounted) return;
 
-    if (registered) {
+    final error = _auth.errorMessage;
+    if (error == null) {
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
       _formKey.currentState?.reset();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your WakeWay account is ready.'),
-          backgroundColor: WakeColors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error != null ? error['message'] : 'Success!'),
+        backgroundColor: error != null ? WakeColors.red : WakeColors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -182,7 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           if (_auth.errorMessage != null) ...[
             const SizedBox(height: 18),
-            _ErrorNotice(message: _auth.errorMessage!),
+            _ErrorNotice(message: _auth.errorMessage!['message']),
           ],
           const SizedBox(height: 24),
           SizedBox(
@@ -226,6 +228,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Icon(Icons.arrow_forward_rounded, size: 19),
                       ],
                     ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute<void>(
+                  builder: (_) => LoginScreen(controller: Authentication()),
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                side: const BorderSide(color: Color.fromRGBO(142, 142, 147, 1.0), width: 2),
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Login'),
+                  SizedBox(width: 9),
+                  Icon(Icons.arrow_forward_rounded, size: 19),
+                ],
+              ),
             ),
           ),
         ],
