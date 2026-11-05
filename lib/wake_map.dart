@@ -1,3 +1,7 @@
+import 'dart:ui' show Codec, ImmutableBuffer;
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,6 +11,8 @@ import 'ui.dart';
 import 'wakeway_controller.dart';
 
 const _defaultCenter = LatLng(14.5547, 121.0244);
+final BuiltInMapCachingProvider _mapTileCache =
+    BuiltInMapCachingProvider.getOrCreateInstance(maxCacheSize: 1_000_000_000);
 
 class WakeMapView extends StatefulWidget {
   const WakeMapView({
@@ -32,7 +38,51 @@ class WakeMapView extends StatefulWidget {
 
 class _WakeMapViewState extends State<WakeMapView> {
   final MapController _mapController = MapController();
+  NetworkTileProvider? _onlineTileProvider;
   bool _mapReady = false;
+  bool _lastOfflineMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastOfflineMode = widget.controller?.offlineMode ?? false;
+    if (!_lastOfflineMode) {
+      _onlineTileProvider = NetworkTileProvider(cachingProvider: _mapTileCache);
+    }
+    widget.controller?.addListener(_handleControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant WakeMapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_handleControllerChanged);
+      final offlineMode = widget.controller?.offlineMode ?? false;
+      if (offlineMode != _lastOfflineMode) {
+        _lastOfflineMode = offlineMode;
+        _onlineTileProvider = offlineMode
+            ? null
+            : NetworkTileProvider(cachingProvider: _mapTileCache);
+      }
+      widget.controller?.addListener(_handleControllerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.removeListener(_handleControllerChanged);
+    super.dispose();
+  }
+
+  void _handleControllerChanged() {
+    final offlineMode = widget.controller?.offlineMode ?? false;
+    if (offlineMode == _lastOfflineMode) return;
+    _onlineTileProvider = offlineMode
+        ? null
+        : NetworkTileProvider(cachingProvider: _mapTileCache);
+    _lastOfflineMode = offlineMode;
+    if (mounted) setState(() {});
+  }
 
   LatLng get _destinationPoint => widget.destination == null
       ? _defaultCenter
@@ -61,11 +111,14 @@ class _WakeMapViewState extends State<WakeMapView> {
                   : (tapPosition, point) => widget.onPointSelected!(point),
             ),
             children: [
-              if (widget.controller?.offlineMode != true)
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.wakeway',
-                ),
+              TileLayer(
+                key: ValueKey(_lastOfflineMode),
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.wakeway',
+                tileProvider: _lastOfflineMode
+                    ? _CachedOnlyTileProvider(_mapTileCache)
+                    : _onlineTileProvider!,
+              ),
               if (widget.selectedPoint != null || widget.destination != null)
                 CircleLayer(
                   circles: [
@@ -115,8 +168,7 @@ class _WakeMapViewState extends State<WakeMapView> {
               ),
             ],
           ),
-          if (widget.controller?.offlineMode != true)
-            const Positioned(left: 10, bottom: 10, child: _MapAttribution()),
+          const Positioned(left: 10, bottom: 8, child: _MapAttribution()),
           if (widget.controller != null)
             Positioned(
               right: 11,
@@ -138,8 +190,8 @@ class _WakeMapViewState extends State<WakeMapView> {
           if (widget.controller?.offlineMode == true)
             const Positioned(
               left: 10,
-              bottom: 10,
-              child: _MapHint(label: 'Offline mode · map tiles paused'),
+              bottom: 30,
+              child: _MapHint(label: 'Offline mode · saved tiles only'),
             ),
         ],
       ),
@@ -161,6 +213,68 @@ class _WakeMapViewState extends State<WakeMapView> {
       );
     }
   }
+}
+
+class _CachedOnlyTileProvider extends TileProvider {
+  _CachedOnlyTileProvider(this.cache);
+
+  final MapCachingProvider cache;
+
+  @override
+  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) =>
+      _CachedTileImageProvider(
+        url: getTileUrl(coordinates, options),
+        cache: cache,
+      );
+}
+
+class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
+  const _CachedTileImageProvider({required this.url, required this.cache});
+
+  final String url;
+  final MapCachingProvider cache;
+
+  @override
+  ImageStreamCompleter loadImage(
+    _CachedTileImageProvider key,
+    ImageDecoderCallback decode,
+  ) => MultiFrameImageStreamCompleter(
+    codec: _loadImage(key, decode),
+    scale: 1,
+    debugLabel: key.url,
+  );
+
+  Future<Codec> _loadImage(
+    _CachedTileImageProvider key,
+    ImageDecoderCallback decode,
+  ) async {
+    final Uint8List bytes;
+    try {
+      bytes =
+          (await key.cache.getTile(key.url))?.bytes ??
+          TileProvider.transparentImage;
+    } on Object {
+      return decode(
+        await ImmutableBuffer.fromUint8List(TileProvider.transparentImage),
+      );
+    }
+    return decode(await ImmutableBuffer.fromUint8List(bytes));
+  }
+
+  @override
+  Future<_CachedTileImageProvider> obtainKey(
+    ImageConfiguration configuration,
+  ) => SynchronousFuture(this);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is _CachedTileImageProvider &&
+          other.url == url &&
+          identical(other.cache, cache));
+
+  @override
+  int get hashCode => Object.hash(url, identityHashCode(cache));
 }
 
 class _MapMarker extends StatelessWidget {

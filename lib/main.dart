@@ -6,6 +6,10 @@ import 'package:wakeway/core/database/app_database.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:wakeway/features/auth/views/register.dart';
 import 'package:wakeway/features/auth/viewmodels/authentication.dart';
+import 'package:wakeway/features/home/views/home_screen.dart';
+import 'package:wakeway/features/map/views/map_screen.dart';
+import 'package:wakeway/features/more/views/more_screen.dart';
+import 'package:wakeway/features/trips/views/trips_screen.dart';
 
 import 'screens.dart';
 import 'ui.dart';
