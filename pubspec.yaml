@@ -49,6 +49,7 @@ dependencies:
   flutter_dotenv: ^6.0.1
   cryptography: ^2.9.0
   crypto: ^3.0.8
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:

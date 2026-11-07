@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WakeDestination {
+  /// Creates a destination.
   const WakeDestination({
     required this.id,
     required this.name,
@@ -24,6 +25,7 @@ class WakeDestination {
   final double latitude;
   final double longitude;
 
+  /// Converts the destination to a JSON-ready map.
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
@@ -32,6 +34,7 @@ class WakeDestination {
     'longitude': longitude,
   };
 
+  /// Creates a destination from saved JSON data.
   factory WakeDestination.fromJson(Map<String, dynamic> json) =>
       WakeDestination(
         id: json['id'] as String,
@@ -41,6 +44,7 @@ class WakeDestination {
         longitude: (json['longitude'] as num).toDouble(),
       );
 
+  /// Creates a destination from a place search result.
   factory WakeDestination.fromSearchResult(Map<String, dynamic> json) {
     final latitude = double.parse(json['lat'] as String);
     final longitude = double.parse(json['lon'] as String);
@@ -57,6 +61,7 @@ class WakeDestination {
 }
 
 class WakeTripRecord {
+  /// Creates a trip history record.
   const WakeTripRecord({
     required this.destination,
     required this.startedAt,
@@ -69,8 +74,10 @@ class WakeTripRecord {
   final DateTime endedAt;
   final bool alarmTriggered;
 
+  /// Calculates the trip length from its start and end times.
   Duration get duration => endedAt.difference(startedAt);
 
+  /// Converts the trip record to a JSON-ready map.
   Map<String, Object?> toJson() => {
     'destination': destination,
     'startedAt': startedAt.toIso8601String(),
@@ -78,6 +85,7 @@ class WakeTripRecord {
     'alarmTriggered': alarmTriggered,
   };
 
+  /// Creates a trip record from saved JSON data.
   factory WakeTripRecord.fromJson(Map<String, dynamic> json) => WakeTripRecord(
     destination: json['destination'] as String,
     startedAt: DateTime.parse(json['startedAt'] as String),
@@ -87,6 +95,7 @@ class WakeTripRecord {
 }
 
 class WakeTripOptions {
+  /// Holds the alarm and trip options selected before a trip.
   const WakeTripOptions({
     required this.radiusMeters,
     required this.warningDistanceMeters,
@@ -113,6 +122,7 @@ class WakeTripOptions {
 }
 
 class WakeWayController extends ChangeNotifier {
+  /// Creates the WakeWay controller.
   WakeWayController();
 
   static const _destinationsKey = 'wakeway.destinations.v1';
@@ -161,17 +171,26 @@ class WakeWayController extends ChangeNotifier {
   bool useMetricUnits = true;
   bool batteryTipsEnabled = true;
 
+  /// Returns the saved destinations.
   List<WakeDestination> get destinations => List.unmodifiable(_destinations);
+
+  /// Returns the trip history.
   List<WakeTripRecord> get trips => List.unmodifiable(_trips);
+
+  /// Indicates whether the alarm is ringing or snoozed.
   bool get isAlarmActive => alarmIsRinging || alarmIsSnoozed;
+
+  /// Indicates whether location services and permission are ready.
   bool get locationReady =>
       locationServicesEnabled &&
       (locationPermissionStatus == 'whileInUse' ||
           locationPermissionStatus == 'always');
 
+  /// Returns the first saved destination, if one exists.
   WakeDestination? get defaultDestination =>
       _destinations.isEmpty ? null : _destinations.first;
 
+  /// Loads saved data and checks notification and location status.
   Future<void> initialize() async {
     _preferences = await SharedPreferences.getInstance();
     final destinationJson = _preferences!.getString(_destinationsKey);
@@ -241,6 +260,7 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Searches for places and caches the results.
   Future<List<WakeDestination>> searchPlaces(String query) async {
     final term = query.trim();
     if (term.length < 3) return const [];
@@ -296,6 +316,7 @@ class WakeWayController extends ChangeNotifier {
     }
   }
 
+  /// Adds a destination to the saved list.
   Future<void> saveDestination(WakeDestination destination) async {
     _destinations.removeWhere((place) => place.id == destination.id);
     _destinations.insert(0, destination);
@@ -303,6 +324,7 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Changes the name of a saved destination.
   Future<void> renameDestination(WakeDestination place, String name) async {
     final index = _destinations.indexWhere((item) => item.id == place.id);
     if (index < 0) return;
@@ -317,12 +339,14 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Removes a saved destination.
   Future<void> removeDestination(WakeDestination place) async {
     _destinations.removeWhere((item) => item.id == place.id);
     await _saveDestinations();
     notifyListeners();
   }
 
+  /// Gets the device's current location.
   Future<Position> locateOnce() async {
     await _ensureLocationPermission();
     final position = await Geolocator.getCurrentPosition(
@@ -338,12 +362,14 @@ class WakeWayController extends ChangeNotifier {
     return position;
   }
 
+  /// Updates the location permission and service status.
   Future<void> refreshPermissionStatus() async {
     locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
     locationPermissionStatus = (await Geolocator.checkPermission()).name;
     notifyListeners();
   }
 
+  /// Requests permission to show notifications.
   Future<void> requestNotificationPermission() async {
     final android = _notifications
         .resolvePlatformSpecificImplementation<
@@ -354,6 +380,7 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Starts monitoring a trip and its alarm point.
   Future<void> startTrip({
     required WakeDestination destination,
     required WakeTripOptions options,
@@ -426,6 +453,7 @@ class WakeWayController extends ChangeNotifier {
     _onPosition(position);
   }
 
+  /// Updates distance and checks whether to show a warning or trigger the alarm.
   void _onPosition(Position position) {
     if (!isMonitoring || activeDestination == null) return;
     currentPosition = position;
@@ -448,6 +476,7 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Shows a notification when the destination is getting close.
   Future<void> _showProximityNotification(double distance) async {
     try {
       await _notifications.show(
@@ -472,6 +501,7 @@ class WakeWayController extends ChangeNotifier {
     }
   }
 
+  /// Starts the alarm sound, vibration, and notification.
   Future<void> _ringAlarm() async {
     alarmIsRinging = true;
     alarmIsSnoozed = false;
@@ -537,6 +567,7 @@ class WakeWayController extends ChangeNotifier {
     }
   }
 
+  /// Pauses the alarm and schedules it to ring again.
   Future<void> snoozeAlarm() async {
     if (!alarmIsRinging) return;
     await _alarmPlayer.stop();
@@ -550,8 +581,10 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Stops the alarm by ending the trip.
   Future<void> stopAlarm() => stopTrip(alarmTriggered: true);
 
+  /// Stops monitoring and saves the trip record.
   Future<void> stopTrip({bool alarmTriggered = false}) async {
     if (!isMonitoring) return;
     isMonitoring = false;
@@ -586,18 +619,21 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Changes the alarm distance radius.
   Future<void> setRadius(int value) async {
     radiusMeters = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Changes how far away the approach warning appears.
   Future<void> setWarningDistance(double kilometers) async {
     warningDistanceMeters = (kilometers * 1000).round();
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Selects a built-in alarm sound.
   Future<void> setAlarmSound(String value) async {
     final previousPath = customAlarmSoundPath;
     alarmSound = value;
@@ -607,11 +643,14 @@ class WakeWayController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Opens device music selection.
   Future<String?> pickDeviceMusic() => _pickCustomAlarmSound('pickDeviceMusic');
 
+  /// Opens system ringtone selection.
   Future<String?> pickSystemRingtone() =>
       _pickCustomAlarmSound('pickSystemRingtone');
 
+  /// Handles audio selection and saves the chosen sound.
   Future<String?> _pickCustomAlarmSound(String method) async {
     if (defaultTargetPlatform != TargetPlatform.android) {
       throw UnsupportedError('Device audio selection is available on Android.');
@@ -637,6 +676,7 @@ class WakeWayController extends ChangeNotifier {
     return name;
   }
 
+  /// Deletes a previously selected audio file if it is no longer used.
   Future<void> _removeUnusedAlarmSound(String? path) async {
     if (path == null || alarmIsRinging) return;
     try {
@@ -647,42 +687,49 @@ class WakeWayController extends ChangeNotifier {
     }
   }
 
+  /// Turns alarm vibration on or off.
   Future<void> setVibration(bool value) async {
     vibrationEnabled = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Turns alarm sound repetition on or off.
   Future<void> setRepeatAlarm(bool value) async {
     repeatAlarm = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Changes the snooze time.
   Future<void> setSnoozeDuration(int value) async {
     snoozeMinutes = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Saves the offline mode setting.
   Future<void> setOfflineMode(bool value) async {
     offlineMode = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Chooses metric or imperial distance units.
   Future<void> setMetricUnits(bool value) async {
     useMetricUnits = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Turns battery tips on or off.
   Future<void> setBatteryTipsEnabled(bool value) async {
     batteryTipsEnabled = value;
     await _saveSettings();
     notifyListeners();
   }
 
+  /// Formats a distance using the selected units.
   String formatDistance(double? meters) {
     if (meters == null) return 'Waiting for GPS';
     if (!useMetricUnits) {
@@ -696,8 +743,10 @@ class WakeWayController extends ChangeNotifier {
         : '${meters.round()} m';
   }
 
+  /// Formats a distance for internal use.
   String _formatDistance(double meters) => formatDistance(meters);
 
+  /// Checks location services and requests permission when needed.
   Future<void> _ensureLocationPermission() async {
     locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
     if (!locationServicesEnabled) {
@@ -724,16 +773,19 @@ class WakeWayController extends ChangeNotifier {
     }
   }
 
+  /// Saves destinations to local preferences.
   Future<void> _saveDestinations() async => _preferences?.setString(
     _destinationsKey,
     jsonEncode(_destinations.map((item) => item.toJson()).toList()),
   );
 
+  /// Saves trip records to local preferences.
   Future<void> _saveTrips() async => _preferences?.setString(
     _tripsKey,
     jsonEncode(_trips.map((item) => item.toJson()).toList()),
   );
 
+  /// Saves app settings to local preferences.
   Future<void> _saveSettings() async => _preferences?.setString(
     _settingsKey,
     jsonEncode({
@@ -750,6 +802,7 @@ class WakeWayController extends ChangeNotifier {
     }),
   );
 
+  /// Cleans up location, timer, and audio resources.
   @override
   void dispose() {
     _positionSubscription?.cancel();

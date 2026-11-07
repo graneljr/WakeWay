@@ -10,7 +10,7 @@ import 'package:wakeway/features/home/views/home_screen.dart';
 import 'package:wakeway/features/map/views/map_screen.dart';
 import 'package:wakeway/features/more/views/more_screen.dart';
 import 'package:wakeway/features/trips/views/trips_screen.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens.dart';
 import 'ui.dart';
 import 'wakeway_controller.dart';
@@ -102,29 +102,67 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _controller;
   late final Animation<double> _scale;
   late final Animation<double> _fade;
-  Timer? _timer;
+ Timer? _timer;
+bool _isNavigating = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 850),
-    );
-    _scale = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
-    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-    _controller.forward();
-    _timer = Timer(const Duration(milliseconds: 1850), _openRegister);
-  }
+@override
+void initState() {
+  super.initState();
 
-  void _openRegister() {
-    if (!mounted) return;
+  _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  );
+
+  _scale = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutBack,
+  );
+
+  _fade = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOut,
+  );
+
+  _controller.forward();
+
+  _timer = Timer(
+    const Duration(milliseconds: 1850),
+    _checkSession,
+  );
+}
+
+Future<void> _checkSession() async {
+  if (!mounted || _isNavigating) return;
+
+  _isNavigating = true;
+  _timer?.cancel();
+
+  final supabase = Supabase.instance.client;
+  final session = supabase.auth.currentSession;
+
+  final isAuthenticated =
+      session != null &&
+      session.user.emailConfirmedAt != null;
+
+  if (!mounted) return;
+
+  if (isAuthenticated) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => RegisterScreen(controller: Authentication()),
+        builder: (_) =>  HomeShell(controller: WakeWayController()), // Replace with your actual home screen
+      ),
+    );
+  } else {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => RegisterScreen(
+          controller: Authentication(),
+        ),
       ),
     );
   }
+}
 
   @override
   void dispose() {
@@ -170,7 +208,7 @@ class _SplashScreenState extends State<SplashScreen>
             bottom: 40,
             child: Center(
               child: TextButton(
-                onPressed: _openRegister,
+                onPressed: _checkSession,
                 child: const Text('Get started'),
               ),
             ),
