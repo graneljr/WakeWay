@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:wakeway/ui.dart';
+import 'package:wakeway/shared/ui.dart';
 
 class MenuItem extends StatelessWidget {
   const MenuItem({

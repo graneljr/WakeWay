@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:wakeway/features/auth/viewmodels/authentication.dart';
+import 'package:wakeway/features/auth/viewmodels/authentication_view_model.dart';
 import 'package:wakeway/features/auth/views/register.dart';
-import 'package:wakeway/main.dart';
-import 'package:wakeway/ui.dart';
-import 'package:wakeway/wakeway_controller.dart';
+import 'package:wakeway/shared/ui.dart';
+import 'package:wakeway/features/navigation/views/home_shell.dart';
+import 'package:wakeway/features/wake/viewmodels/wakeway_view_model.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.controller});
 
-  final Authentication controller;
+  final AuthenticationViewModel controller;
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -18,7 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _passwordVisible = false;
 
-  Authentication get _auth => widget.controller;
+  AuthenticationViewModel get _auth => widget.controller;
 
   @override
   void dispose() {
@@ -44,18 +45,20 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(error != null ? error['message'] : 'Login successful'),
-        backgroundColor: error != null && error['status'] == 200 ?  WakeColors.green:WakeColors.red ,
+        backgroundColor: error != null && error['status'] == 200
+            ? WakeColors.green
+            : WakeColors.red,
         behavior: SnackBarBehavior.floating,
       ),
     );
 
-    if(error == null || error['status'] == 200) {
+    if (error == null || error['status'] == 200) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => HomeShell(controller: WakeWayController()),
+          builder: (_) => HomeShell(controller: WakeWayViewModel()),
         ),
       );
-        }
+    }
   }
 
   @override
@@ -170,9 +173,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
           ),
-          if (_auth.errorMessage != null && _auth.errorMessage?['status'] != 200) ...[
+          if (_auth.errorMessage != null &&
+              _auth.errorMessage?['status'] != 200) ...[
             const SizedBox(height: 18),
-            _ErrorNotice(message: _auth.errorMessage?['message'] ?? "An error occurred"),
+            _ErrorNotice(
+              message: _auth.errorMessage?['message'] ?? "An error occurred",
+            ),
           ],
           const SizedBox(height: 24),
           SizedBox(
@@ -225,7 +231,8 @@ class _LoginScreenState extends State<LoginScreen> {
             child: FilledButton(
               onPressed: () => Navigator.of(context).pushReplacement(
                 MaterialPageRoute<void>(
-                  builder: (_) => RegisterScreen(controller: Authentication()),
+                  builder: (_) =>
+                      RegisterScreen(controller: AuthenticationViewModel()),
                 ),
               ),
               style: FilledButton.styleFrom(

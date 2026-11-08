@@ -1,12 +1,12 @@
-
 import 'package:flutter/material.dart';
 import 'package:wakeway/features/trips/views/trip_history.dart';
-import 'package:wakeway/ui.dart';
-import 'package:wakeway/wakeway_controller.dart';
+import 'package:wakeway/shared/ui.dart';
+import 'package:wakeway/features/wake/viewmodels/wakeway_view_model.dart';
+
 class TripsScreen extends StatelessWidget {
   const TripsScreen({super.key, required this.controller});
 
-  final WakeWayController controller;
+  final WakeWayViewModel controller;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(

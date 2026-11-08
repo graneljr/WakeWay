@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:wakeway/screens.dart';
-import 'package:wakeway/ui.dart';
-import 'package:wakeway/wakeway_controller.dart';
+import 'package:wakeway/features/destinations/viewmodels/destination_view_model.dart';
+import 'package:wakeway/shared/painters/hero_road_painter.dart';
+import 'package:wakeway/shared/ui.dart';
+import 'package:wakeway/features/wake/viewmodels/wakeway_view_model.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.controller,
+    required this.destinationViewModel,
     required this.onStartTrip,
     required this.onSetDestination,
     required this.onSaved,
@@ -15,7 +17,8 @@ class HomeScreen extends StatelessWidget {
     required this.onGpsStatus,
   });
 
-  final WakeWayController controller;
+  final WakeWayViewModel controller;
+  final DestinationViewModel destinationViewModel;
   final VoidCallback onStartTrip;
   final VoidCallback onSetDestination;
   final VoidCallback onSaved;
@@ -222,7 +225,8 @@ class HomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        controller.defaultDestination?.name ?? 'Add a stop',
+                        destinationViewModel.defaultDestination?.name ??
+                            'Add a stop',
                         style: TextStyle(
                           color: WakeColors.ink,
                           fontSize: 14,
@@ -231,7 +235,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        controller.defaultDestination?.address ??
+                        destinationViewModel.defaultDestination?.address ??
                             'Choose a destination to get started',
                         style: TextStyle(color: WakeColors.muted, fontSize: 11),
                       ),

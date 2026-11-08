@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:wakeway/features/auth/viewmodels/authentication.dart';
+import 'package:wakeway/features/auth/viewmodels/authentication_view_model.dart';
 import 'package:wakeway/features/auth/views/login.dart';
-import 'package:wakeway/ui.dart';
+import 'package:wakeway/shared/ui.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key, required this.controller});
 
-  final Authentication controller;
+  final AuthenticationViewModel controller;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -19,7 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   bool _passwordVisible = false;
 
-  Authentication get _auth => widget.controller;
+  AuthenticationViewModel get _auth => widget.controller;
 
   @override
   void dispose() {
@@ -237,11 +237,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: FilledButton(
               onPressed: () => Navigator.of(context).pushReplacement(
                 MaterialPageRoute<void>(
-                  builder: (_) => LoginScreen(controller: Authentication()),
+                  builder: (_) =>
+                      LoginScreen(controller: AuthenticationViewModel()),
                 ),
               ),
               style: FilledButton.styleFrom(
-                side: const BorderSide(color: Color.fromRGBO(142, 142, 147, 1.0), width: 2),
+                side: const BorderSide(
+                  color: Color.fromRGBO(142, 142, 147, 1.0),
+                  width: 2,
+                ),
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(

@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:wakeway/ui.dart';
-import 'package:wakeway/wake_map.dart';
-import 'package:wakeway/wakeway_controller.dart';
+import 'package:wakeway/features/destinations/viewmodels/destination_view_model.dart';
+import 'package:wakeway/shared/ui.dart';
+import 'package:wakeway/features/map/widgets/wake_map_view.dart';
+import 'package:wakeway/features/map/models/wake_destination.dart';
+import 'package:wakeway/features/wake/viewmodels/wakeway_view_model.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({
     super.key,
     required this.controller,
+    required this.destinationViewModel,
     required this.onConfirm,
   });
 
-  final WakeWayController controller;
+  final WakeWayViewModel controller;
+  final DestinationViewModel destinationViewModel;
   final ValueChanged<(WakeDestination, LatLng)> onConfirm;
 
   @override
@@ -19,7 +23,8 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  late WakeDestination? _destination = widget.controller.defaultDestination;
+  late WakeDestination? _destination =
+      widget.destinationViewModel.defaultDestination;
   LatLng? _alarmPoint;
   final TextEditingController _searchController = TextEditingController();
   List<WakeDestination> _results = const [];
@@ -36,6 +41,21 @@ class _MapScreenState extends State<MapScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant MapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_destination == null) {
+      final defaultDestination = widget.destinationViewModel.defaultDestination;
+      if (defaultDestination != null) {
+        _destination = defaultDestination;
+        _alarmPoint = LatLng(
+          defaultDestination.latitude,
+          defaultDestination.longitude,
+        );
+      }
+    }
   }
 
   Future<void> _search() async {
@@ -147,20 +167,20 @@ class _MapScreenState extends State<MapScreen> {
             ),
             items: [
               if (_destination != null &&
-                  !widget.controller.destinations.any(
+                  !widget.destinationViewModel.destinations.any(
                     (place) => place.id == _destination!.id,
                   ))
                 DropdownMenuItem(
                   value: _destination!.id,
                   child: Text(_destination!.name),
                 ),
-              ...widget.controller.destinations.map(
+              ...widget.destinationViewModel.destinations.map(
                 (place) =>
                     DropdownMenuItem(value: place.id, child: Text(place.name)),
               ),
             ],
             onChanged: (id) {
-              final places = widget.controller.destinations;
+              final places = widget.destinationViewModel.destinations;
               WakeDestination? place;
               for (final candidate in places) {
                 if (candidate.id == id) place = candidate;

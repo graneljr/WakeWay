@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wakeway/shared/components/menu_item.dart';
-import 'package:wakeway/ui.dart';
+import 'package:wakeway/shared/ui.dart';
+
 class MoreScreen extends StatelessWidget {
   const MoreScreen({
     super.key,

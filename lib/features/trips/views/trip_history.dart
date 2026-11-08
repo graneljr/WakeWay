@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:wakeway/ui.dart';
-import 'package:wakeway/wakeway_controller.dart';
+import 'package:wakeway/shared/ui.dart';
+import 'package:wakeway/features/trips/models/wake_trip_record.dart';
 
 class TripHistoryList extends StatelessWidget {
   const TripHistoryList({super.key, required this.trips});
