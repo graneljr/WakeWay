@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:wakeway/core/database/app_database.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:wakeway/features/auth/views/register.dart';
 import 'package:wakeway/features/auth/viewmodels/authentication.dart';
 import 'package:wakeway/features/home/views/home_screen.dart';
@@ -20,7 +19,6 @@ Future<void> main() async {
   final controller = WakeWayController();
   await controller.initialize();
   await SupabaseService.initialize();
-  await dotenv.load(fileName: '.env');
   runApp(WakeWayApp(controller: controller));
 }
 

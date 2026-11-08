@@ -76,7 +76,7 @@ flutter:
   assets:
     - assets/audio/wake_alarm.wav
     - assets/audio/classic_alarm.wav
-    - .env
+    
 
   # To add assets to your application, add an assets section, like this:
   # assets:
