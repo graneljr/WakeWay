@@ -21,8 +21,14 @@ class SavedDestinationsScreen extends StatefulWidget {
 }
 
 class _SavedDestinationsScreenState extends State<SavedDestinationsScreen> {
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _rename(WakeDestination place) async {
     final editor = TextEditingController(text: place.name);
+    
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -44,7 +50,7 @@ class _SavedDestinationsScreenState extends State<SavedDestinationsScreen> {
         ],
       ),
     );
-    editor.dispose();
+     if (!mounted) return;
     if (name != null) {
       final renamed = await widget.viewModel.renameDestination(place, name);
       if (!renamed) _showError();

@@ -1,5 +1,6 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:wakeway/features/map/models/wake_destination.dart';
 
 class SQLiteHelper {
   static final SQLiteHelper instance = SQLiteHelper._init();
@@ -65,22 +66,22 @@ class SQLiteHelper {
   }
 
   // UPDATE
-  Future<int> updateStudent(int id, Map<String, dynamic> destinations) async {
+  Future<int> updateDestination(String id, String name) async {
     final db = await instance.database;
 
     return await db.update(
       'destinations',
-      destinations,
+       {'name': name.trim()},
       where: 'id = ?',
       whereArgs: [id],
     );
   }
 
   // DELETE
-  Future<int> deleteStudent(int id) async {
+  Future<int> deleteDestination(WakeDestination destination) async {
     final db = await instance.database;
 
-    return await db.delete('destinations', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('destinations', where: 'id = ?', whereArgs: [destination.id]);
   }
 
   // CLOSE DATABASE

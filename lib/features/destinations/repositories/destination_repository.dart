@@ -65,6 +65,7 @@ class DestinationRepository {
         .update({'name': name.trim(), 'updated_at': _now()})
         .eq('id', destination.id)
         .eq('user_id', userId);
+    await SQLiteHelper.instance.updateDestination(destination.id, name);
   }
 
   Future<void> removeDestination(WakeDestination destination) async {
@@ -74,6 +75,7 @@ class DestinationRepository {
         .delete()
         .eq('id', destination.id)
         .eq('user_id', userId);
+    await SQLiteHelper.instance.deleteDestination(destination);
   }
 
   Map<String, Object?> _toRow(WakeDestination destination, String userId) => {

@@ -26,6 +26,13 @@ class WakeDestination {
     'longitude': longitude,
   };
 
+    Map<String, dynamic> toRename() {
+    return {
+      'id': id,
+      'name': name,
+    };
+  }
+
   factory WakeDestination.fromJson(Map<String, dynamic> json) =>
       WakeDestination(
         id: json['id'] as String,
