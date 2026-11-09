@@ -12,13 +12,14 @@ class DestinationRepository {
   final SupabaseClient _client;
 
   Future<List<WakeDestination>> getDestinations() async {
-    final userId = _requireUserId();
-    final rows = await _client
-        .from(_table)
-        .select('id, name, address, latitude, longitude, updated_at')
-        .eq('user_id', userId)
-        .order('updated_at', ascending: false);
+    // final userId = _requireUserId();
+    // final rows = await _client
+    //     .from(_table)
+    //     .select('id, name, address, latitude, longitude, updated_at')
+    //     .eq('user_id', userId)
+    //     .order('updated_at', ascending: false);
 
+    final rows = await SQLiteHelper.instance.getDestinations();
     return rows
         .map((row) => WakeDestination.fromJson(row))
         .toList(growable: false);

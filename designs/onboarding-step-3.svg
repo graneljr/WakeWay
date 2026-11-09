@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="900" viewBox="0 0 420 900" fill="none">
+  <title>WakeWay onboarding step 3: start your trip</title>
+  <defs>
+    <linearGradient id="mapBg" x1="35" y1="152" x2="383" y2="474" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F5EE"/><stop offset="1" stop-color="#E9F0E8"/></linearGradient>
+    <filter id="shadow" x="8" y="124" width="404" height="372" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0"/><feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="a"/><feOffset dy="7"/><feGaussianBlur stdDeviation="9"/><feComposite in2="a" operator="out"/><feColorMatrix type="matrix" values="0 0 0 0 0.0627 0 0 0 0 0.1647 0 0 0 0 0.2627 0 0 0 0.12 0"/><feBlend in2="SourceGraphic"/></filter>
+    <clipPath id="map"><rect x="26" y="142" width="368" height="338" rx="26"/></clipPath>
+  </defs>
+  <rect width="420" height="900" fill="#F4F7FA"/>
+  <text x="28" y="30" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="700">9:41</text>
+  <path d="M334 21.5C339.4 16.9 347.6 16.9 353 21.5M337.5 25C341.1 22 345.9 22 349.5 25" stroke="#142D46" stroke-width="1.8" stroke-linecap="round"/><circle cx="343.5" cy="28.5" r="1.3" fill="#142D46"/><rect x="361" y="17" width="24" height="13" rx="3.5" stroke="#142D46" stroke-width="1.5"/><rect x="363.5" y="19.5" width="16" height="8" rx="2" fill="#142D46"/><rect x="386.5" y="21" width="2.5" height="5" rx="1.2" fill="#142D46"/>
+  <rect x="26" y="57" width="42" height="42" rx="13" fill="#102A43"/><path d="M35 88C42 83 47 78 58 67" stroke="white" stroke-opacity=".92" stroke-width="3.2" stroke-linecap="round"/><path d="M35 88C42 83 47 78 58 67" stroke="#68A8F8" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="3 5"/><circle cx="36" cy="87" r="3.4" fill="#68A8F8" stroke="#102A43" stroke-width="1.5"/><path d="M58 62.8C55.2 62.8 53 65 53 67.7C53 71.3 58 76 58 76C58 76 63 71.3 63 67.7C63 65 60.8 62.8 58 62.8Z" fill="#F4F7FA"/><circle cx="58" cy="67.7" r="1.7" fill="#246FCB"/>
+  <text x="79" y="84" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="750" letter-spacing="-.5">WakeWay</text><text x="336" y="83" fill="#5E6F81" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="600">Skip</text>
+  <g filter="url(#shadow)"><rect x="26" y="142" width="368" height="338" rx="26" fill="white"/></g>
+  <g clip-path="url(#map)">
+    <rect x="26" y="142" width="368" height="338" fill="#E8F5EF"/>
+    <circle cx="344" cy="197" r="68" fill="#D8EDE2"/>
+    <circle cx="69" cy="344" r="53" fill="#DDEFE5"/>
+    <rect x="47" y="159" width="137" height="34" rx="12" fill="#FFFFFF"/>
+    <circle cx="64" cy="176" r="5" fill="#1F795C"/>
+    <circle cx="64" cy="176" r="9" stroke="#1F795C" stroke-opacity=".25" stroke-width="2"/>
+    <text x="78" y="180" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="10" font-weight="700" letter-spacing=".4">TRIP MONITORING</text>
+    <rect x="110" y="180" width="200" height="244" rx="29" fill="#102A43"/>
+    <rect x="117" y="187" width="186" height="230" rx="23" fill="#FFFFFF"/>
+    <rect x="178" y="194" width="64" height="5" rx="2.5" fill="#CBD5DF"/>
+    <text x="136" y="220" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="10" font-weight="700" letter-spacing=".5">WAKEWAY TRIP</text>
+    <circle cx="210" cy="273" r="47" fill="#EAF2FF"/>
+    <circle cx="210" cy="273" r="39" stroke="#D5E3F2" stroke-width="5"/>
+    <path d="M210 234A39 39 0 0 1 244 254" stroke="#246FCB" stroke-width="5" stroke-linecap="round"/>
+    <path d="M210 261C205.6 261 202 264.6 202 269C202 275 210 282 210 282C210 282 218 275 218 269C218 264.6 214.4 261 210 261Z" fill="#246FCB"/>
+    <circle cx="210" cy="269" r="2.4" fill="#FFFFFF"/>
+    <text x="210" y="331" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="middle">On your way</text>
+    <text x="210" y="349" fill="#5E6F81" font-family="Inter,Arial,sans-serif" font-size="9" text-anchor="middle">Your alarm is ready</text>
+    <rect x="137" y="363" width="146" height="7" rx="3.5" fill="#E7ECF1"/>
+    <rect x="137" y="363" width="82" height="7" rx="3.5" fill="#1F795C"/>
+    <circle cx="137" cy="366.5" r="5" fill="#1F795C" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="283" cy="366.5" r="5" fill="#D7E1E9" stroke="#FFFFFF" stroke-width="2"/>
+    <rect x="48" y="382" width="324" height="72" rx="18" fill="#FFFFFF"/>
+    <rect x="61" y="399" width="38" height="38" rx="12" fill="#FFF0F0"/>
+    <path d="M80 406C76.8 406 74.2 408.6 74.2 411.8V414.9C74.2 415.9 73.8 416.9 73 417.6L71.8 418.8C71.1 419.5 71.6 420.7 72.6 420.7H87.4C88.4 420.7 88.9 419.5 88.2 418.8L87 417.6C86.2 416.9 85.8 415.9 85.8 414.9V411.8C85.8 408.6 83.2 406 80 406Z" fill="#C8434E"/>
+    <path d="M77.5 422.8C77.9 423.8 78.8 424.5 80 424.5C81.2 424.5 82.1 423.8 82.5 422.8H77.5Z" fill="#C8434E"/>
+    <text x="111" y="410" fill="#5E6F81" font-family="Inter,Arial,sans-serif" font-size="9" font-weight="700" letter-spacing=".8">WAKEWAY ALERT</text>
+    <text x="111" y="429" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="12" font-weight="700">You're getting close to your stop</text>
+  </g>
+  <text x="28" y="524" fill="#246FCB" font-family="Inter,Arial,sans-serif" font-size="11" font-weight="750" letter-spacing="1.2">STEP 3 OF 3</text>
+  <text x="26" y="568" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="750" letter-spacing="-1">Start your trip.</text><text x="26" y="606" fill="#142D46" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="750" letter-spacing="-1">We'll watch your stop.</text>
+  <text x="28" y="647" fill="#5E6F81" font-family="Inter,Arial,sans-serif" font-size="14">Start monitoring when you board. WakeWay</text><text x="28" y="669" fill="#5E6F81" font-family="Inter,Arial,sans-serif" font-size="14">will alert you as you get close.</text>
+  <circle cx="194" cy="704" r="4" fill="#C8D3DD"/><circle cx="210" cy="704" r="4" fill="#C8D3DD"/><circle cx="226" cy="704" r="4" fill="#246FCB"/>
+  <rect x="26" y="730" width="368" height="58" rx="18" fill="#246FCB"/><text x="184" y="766" fill="white" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="middle">Get started</text><circle cx="350" cy="759" r="16" fill="white" fill-opacity=".14"/><path d="M344 759H356M351 754L356 759L351 764" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="121" y="831" fill="#5E6F81" font-family="Inter,Arial,sans-serif" font-size="13">Already have an account?</text><text x="278" y="831" fill="#246FCB" font-family="Inter,Arial,sans-serif" font-size="13" font-weight="700">Log in</text>
+  <rect x="163" y="879" width="94" height="5" rx="2.5" fill="#142D46"/>
+</svg>
