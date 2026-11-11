@@ -50,6 +50,7 @@ class WakeWayViewModel extends ChangeNotifier {
   final SQLiteHelper _database = SQLiteHelper.instance;
 
   final List<WakeTripRecord> _trips = [];
+  final List<WakeTrip> _unfinishedTrips = [];
 
   final Map<String, List<WakeDestination>> _placeSearchCache = {};
 
@@ -105,6 +106,7 @@ class WakeWayViewModel extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   List<WakeTripRecord> get trips => List.unmodifiable(_trips);
+  List<WakeTrip> get unfinishedTrips => List.unmodifiable(_unfinishedTrips);
 
   AuthenticationRepository get authenticationRepository =>
       _authenticationRepository;
@@ -138,6 +140,7 @@ class WakeWayViewModel extends ChangeNotifier {
     await _loadSearchCache();
     await _loadSettings();
     await _loadTripHistory();
+    await _loadUnfinishedTrips();
 
     await _notifications.initialize(
       settings: const InitializationSettings(
@@ -189,6 +192,16 @@ class WakeWayViewModel extends ChangeNotifier {
     if (_trips.length > 100) {
       _trips.removeRange(100, _trips.length);
     }
+  }
+
+  Future<void> _loadUnfinishedTrips() async {
+    final userId = currentUserId;
+    if (userId == null) return;
+
+    final rows = await _database.getUnfinishedTrips(userId);
+    _unfinishedTrips
+      ..clear()
+      ..addAll(rows.map(WakeTrip.fromLocalJson));
   }
 
   Future<void> _loadSearchCache() async {
@@ -548,23 +561,88 @@ class WakeWayViewModel extends ChangeNotifier {
       queueId: _uuid.v4(),
     );
 
+    _unfinishedTrips.insert(0, trip);
+    await _startMonitoring(trip, destination: destination, position: position);
+  }
+
+  Future<void> resumeTrip(String tripId) async {
+    if (isMonitoring) {
+      if (_activeTrip?.id == tripId) return;
+      throw StateError('Another trip is already being monitored.');
+    }
+
+    final tripIndex = _unfinishedTrips.indexWhere((trip) => trip.id == tripId);
+    if (tripIndex == -1) {
+      throw StateError('This trip is no longer available to resume.');
+    }
+
+    final trip = _unfinishedTrips[tripIndex];
+    await _ensureLocationPermission();
+    await requestNotificationPermission();
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 20),
+      ),
+    );
+
+    final resumedTrip = WakeTrip(
+      id: trip.id,
+      userId: trip.userId,
+      destinationId: trip.destinationId,
+      destinationName: trip.destinationName,
+      destinationAddress: trip.destinationAddress,
+      alarmLatitude: trip.alarmLatitude,
+      alarmLongitude: trip.alarmLongitude,
+      radiusMeters: trip.radiusMeters,
+      warningDistanceMeters: trip.warningDistanceMeters,
+      vibrationEnabled: trip.vibrationEnabled,
+      repeatAlarm: trip.repeatAlarm,
+      snoozeMinutes: trip.snoozeMinutes,
+      alarmSound: trip.alarmSound,
+      customAlarmSoundPath: trip.customAlarmSoundPath,
+      useAdvancePoint: trip.useAdvancePoint,
+      status: 'active',
+      startedAt: trip.startedAt,
+      completedAt: null,
+      alarmTriggered: trip.alarmTriggered,
+      updatedAt: DateTime.now().toUtc(),
+    );
+
+    await _database.markTripActive(
+      tripId: resumedTrip.id,
+      userId: resumedTrip.userId,
+      updatedAt: resumedTrip.updatedAt.toIso8601String(),
+      cloudPayload: resumedTrip.toCloudJson(),
+      queueId: _uuid.v4(),
+    );
+
+    _unfinishedTrips[tripIndex] = resumedTrip;
+    await _startMonitoring(
+      resumedTrip,
+      destination: _destinationFromTrip(resumedTrip),
+      position: position,
+    );
+  }
+
+  Future<void> _startMonitoring(
+    WakeTrip trip, {
+    required WakeDestination? destination,
+    required Position position,
+  }) async {
     _activeTrip = trip;
+    activeDestination = destination ?? _destinationFromTrip(trip);
 
-    activeDestination = destination;
-
-    alarmLatitude = resolvedLat;
-    alarmLongitude = resolvedLon;
-
-    radiusMeters = options.radiusMeters;
-    warningDistanceMeters = options.warningDistanceMeters;
-
-    vibrationEnabled = options.vibration;
-    repeatAlarm = options.repeatAlarm;
-    snoozeMinutes = options.snoozeMinutes;
-
-    alarmSound = options.alarmSound;
-    customAlarmSoundPath = options.alarmSoundPath;
-    vibrationEnabled = options.vibration;
+    alarmLatitude = trip.alarmLatitude;
+    alarmLongitude = trip.alarmLongitude;
+    radiusMeters = trip.radiusMeters;
+    warningDistanceMeters = trip.warningDistanceMeters;
+    vibrationEnabled = trip.vibrationEnabled;
+    repeatAlarm = trip.repeatAlarm;
+    snoozeMinutes = trip.snoozeMinutes;
+    alarmSound = trip.alarmSound;
+    customAlarmSoundPath = trip.customAlarmSoundPath;
     currentPosition = position;
 
     distanceToAlarmMeters = Geolocator.distanceBetween(
@@ -573,48 +651,39 @@ class WakeWayViewModel extends ChangeNotifier {
       alarmLatitude,
       alarmLongitude,
     );
-
-    tripStartedAt = now;
-
+    tripStartedAt = trip.startedAt;
     isMonitoring = true;
-
     alarmIsRinging = false;
     alarmIsSnoozed = false;
     warningWasShown = false;
-
-    _alarmTriggeredInTrip = false;
-
+    _alarmTriggeredInTrip = trip.alarmTriggered;
     lastError = null;
 
     await _saveSettings();
-
     notifyListeners();
 
     final LocationSettings settings =
         defaultTargetPlatform == TargetPlatform.android
-            ? AndroidSettings(
-                accuracy: LocationAccuracy.high,
-                distanceFilter: 10,
-                intervalDuration: const Duration(seconds: 5),
-                foregroundNotificationConfig:
-                    const ForegroundNotificationConfig(
-                  notificationTitle:
-                      'WakeWay is monitoring your trip',
-                  notificationText:
-                      'Location is used to alert you near your stop.',
-                  notificationChannelName: 'Trip monitoring',
-                  enableWakeLock: true,
-                  setOngoing: true,
-                ),
-              )
-            : const LocationSettings(
-                accuracy: LocationAccuracy.high,
-                distanceFilter: 10,
-              );
+        ? AndroidSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+            intervalDuration: const Duration(seconds: 5),
+            foregroundNotificationConfig: const ForegroundNotificationConfig(
+              notificationTitle: 'WakeWay is monitoring your trip',
+              notificationText:
+                  'Location is used to alert you near your stop.',
+              notificationChannelName: 'Trip monitoring',
+              enableWakeLock: true,
+              setOngoing: true,
+            ),
+          )
+        : const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          );
 
     try {
-      _positionSubscription =
-          Geolocator.getPositionStream(
+      _positionSubscription = Geolocator.getPositionStream(
         locationSettings: settings,
       ).listen(
         _onPosition,
@@ -623,16 +692,23 @@ class WakeWayViewModel extends ChangeNotifier {
           notifyListeners();
         },
       );
-
       _onPosition(position);
     } catch (error) {
-      // Keep the trip record for recovery and troubleshooting.
       lastError = 'Could not start GPS monitoring: $error';
       isMonitoring = false;
       notifyListeners();
       rethrow;
     }
   }
+
+  WakeDestination _destinationFromTrip(WakeTrip trip) => WakeDestination(
+    id: trip.destinationId ?? trip.id,
+    name: trip.destinationName,
+    user_id: trip.userId,
+    address: trip.destinationAddress ?? '',
+    latitude: trip.alarmLatitude,
+    longitude: trip.alarmLongitude,
+  );
 
   // ---------------------------------------------------------------------------
   // GPS MONITORING
@@ -903,6 +979,7 @@ class WakeWayViewModel extends ChangeNotifier {
 
     activeDestination = null;
     _activeTrip = null;
+    _unfinishedTrips.removeWhere((unfinished) => unfinished.id == trip.id);
 
     tripStartedAt = null;
     distanceToAlarmMeters = null;

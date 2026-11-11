@@ -12,6 +12,7 @@ import 'package:wakeway/features/map/views/map_screen.dart';
 import 'package:wakeway/features/map/views/offline_maps_screen.dart';
 import 'package:wakeway/features/more/views/more_screen.dart';
 import 'package:wakeway/features/settings/views/settings_screen.dart';
+import 'package:wakeway/features/trips/models/trips.dart';
 import 'package:wakeway/features/trips/views/active_trip_screen.dart';
 import 'package:wakeway/features/trips/views/alarm_config_screen.dart';
 import 'package:wakeway/features/trips/views/alarm_triggered_screen.dart';
@@ -171,6 +172,47 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openActiveTrip() => _openAlarmSetup();
 
+  void _resumeTripFromList(WakeTrip trip) {
+    unawaited(_resumeTrip(trip));
+  }
+
+  Future<void> _resumeTrip(WakeTrip trip) async {
+    if (widget.controller.isMonitoring) {
+      if (widget.controller.activeTripId == trip.id) {
+        _openMonitoringScreen();
+      }
+      return;
+    }
+
+    try {
+      if (!widget.controller.locationReady ||
+          !widget.controller.notificationsEnabled) {
+        final continueToPermissions = await _showTripPermissionPrompt();
+        if (!continueToPermissions || !mounted) return;
+      }
+
+      await widget.controller.resumeTrip(trip.id);
+      if (!mounted) return;
+      _openMonitoringScreen();
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
+  }
+
+  void _openMonitoringScreen() {
+    _push(
+      ActiveTripScreen(
+        controller: widget.controller,
+        onStop: _confirmStopTrip,
+      ),
+    );
+  }
+
   void _openAlarm() {
     if (_alarmRouteShowing) return;
     _alarmRouteShowing = true;
@@ -274,7 +316,10 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
       ),
-      TripsScreen(controller: widget.controller),
+      TripsScreen(
+        controller: widget.controller,
+        onResumeTrip: _resumeTripFromList,
+      ),
       MoreScreen(
         onSaved: () => _push(
           SavedDestinationsScreen(

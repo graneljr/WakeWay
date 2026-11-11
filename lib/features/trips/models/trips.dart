@@ -51,6 +51,38 @@ class WakeTrip {
   final bool alarmTriggered;
   final DateTime updatedAt;
 
+  factory WakeTrip.fromLocalJson(Map<String, dynamic> json) => WakeTrip(
+    id: json['id'] as String,
+    userId: json['user_id'] as String,
+    destinationId: json['destination_id'] as String?,
+    destinationName: json['destination_name'] as String,
+    destinationAddress: json['destination_address'] as String?,
+    alarmLatitude: (json['alarm_latitude'] as num).toDouble(),
+    alarmLongitude: (json['alarm_longitude'] as num).toDouble(),
+    radiusMeters: (json['radius_meters'] as num).toInt(),
+    warningDistanceMeters: (json['warning_distance_meters'] as num).toInt(),
+    vibrationEnabled: _asBool(json['vibration_enabled'], fallback: true),
+    repeatAlarm: _asBool(json['repeat_alarm'], fallback: true),
+    snoozeMinutes: (json['snooze_minutes'] as num?)?.toInt() ?? 5,
+    alarmSound: json['alarm_sound'] as String? ?? 'WakeWay alarm',
+    customAlarmSoundPath: json['custom_alarm_sound_path'] as String?,
+    useAdvancePoint: _asBool(json['use_advance_point'], fallback: false),
+    status: json['status'] as String? ?? 'active',
+    startedAt: DateTime.parse(json['started_at'] as String),
+    completedAt: json['completed_at'] == null
+        ? null
+        : DateTime.parse(json['completed_at'] as String),
+    alarmTriggered: _asBool(json['alarm_triggered'], fallback: false),
+    updatedAt: DateTime.parse(json['updated_at'] as String),
+  );
+
+  static bool _asBool(Object? value, {required bool fallback}) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) return value == 'true' || value == '1';
+    return fallback;
+  }
+
 
 
   Map<String, dynamic> toLocalJson() {

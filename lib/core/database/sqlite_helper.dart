@@ -209,6 +209,49 @@ class SQLiteHelper {
     return results.isEmpty ? null : results.first;
   }
 
+  Future<List<Map<String, dynamic>>> getUnfinishedTrips(String userId) async {
+    final db = await database;
+
+    return db.query(
+      'trips',
+      where: 'user_id = ? AND status != ? AND completed_at IS NULL',
+      whereArgs: [userId, 'completed'],
+      orderBy: 'started_at DESC',
+    );
+  }
+
+  Future<void> markTripActive({
+    required String tripId,
+    required String userId,
+    required String updatedAt,
+    required Map<String, dynamic> cloudPayload,
+    required String queueId,
+  }) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      final updatedRows = await txn.update(
+        'trips',
+        {'status': 'active', 'updated_at': updatedAt},
+        where: 'id = ? AND user_id = ? AND completed_at IS NULL',
+        whereArgs: [tripId, userId],
+      );
+
+      if (updatedRows == 0) {
+        throw StateError('This trip is no longer available to resume.');
+      }
+
+      await txn.insert('sync_queue', {
+        'id': queueId,
+        'table_name': 'trips',
+        'record_id': tripId,
+        'operation': 'upsert',
+        'payload': cloudPayload.toString(),
+        'created_at': updatedAt,
+      });
+    });
+  }
+
   Future<void> completeTrip({
     required String tripId,
     required Map<String, dynamic> cloudPayload,
