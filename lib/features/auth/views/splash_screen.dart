@@ -60,9 +60,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (isAuthenticated) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => HomeShell(
-            controller: WakeWayViewModel(),
-          ), // Replace with your actual home screen
+          builder: (_) => HomeShell(controller: widget.controller),
         ),
       );
     } else {

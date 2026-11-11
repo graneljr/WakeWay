@@ -37,8 +37,11 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
-    _destinationViewModel = DestinationViewModel();
+    _destinationViewModel = DestinationViewModel(
+      authenticationRepository: widget.controller.authenticationRepository,
+    );
     unawaited(_destinationViewModel.initialize());
+    unawaited(widget.controller.initialize());
     _seenAlarmEventCount = widget.controller.alarmEventCount;
     widget.controller.addListener(_onControllerChanged);
   }

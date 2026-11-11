@@ -36,34 +36,67 @@ class SQLiteHelper {
     updated_at TEXT
 );
     ''');
-  await db.execute('''
-    CREATE TABLE trips (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    destination_id TEXT NOT NULL,
+    await db.execute('''
+  CREATE TABLE trips (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        destination_id TEXT,
 
-    alarm_latitude REAL NOT NULL,
-    alarm_longitude REAL NOT NULL,
+        destination_name TEXT NOT NULL,
+        destination_address TEXT,
 
-    radius_meters REAL NOT NULL,
-    warning_distance_meters REAL NOT NULL,
+        alarm_latitude REAL NOT NULL,
+        alarm_longitude REAL NOT NULL,
 
-    vibration_enabled INTEGER NOT NULL DEFAULT 1,
-    repeat_alarm INTEGER NOT NULL DEFAULT 0,
-    snooze_minutes INTEGER NOT NULL DEFAULT 5,
+        radius_meters INTEGER NOT NULL,
+        warning_distance_meters INTEGER NOT NULL,
 
-    alarm_sound TEXT,
-    custom_alarm_sound_path TEXT,
+        vibration_enabled INTEGER NOT NULL DEFAULT 1,
+        repeat_alarm INTEGER NOT NULL DEFAULT 1,
+        snooze_minutes INTEGER NOT NULL DEFAULT 5,
 
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
+        alarm_sound TEXT NOT NULL,
+        custom_alarm_sound_path TEXT,
+        use_advance_point INTEGER NOT NULL DEFAULT 0,
 
-    is_done INTEGER NOT NULL DEFAULT 0,
-    sync_status TEXT NOT NULL DEFAULT 'pending',
+        status TEXT NOT NULL DEFAULT 'active',
+        alarm_triggered INTEGER NOT NULL DEFAULT 0,
 
-    FOREIGN KEY (destination_id)
-        REFERENCES destinations(id)
-);
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL,
+
+        FOREIGN KEY (destination_id)
+          REFERENCES destinations(id)
+          ON DELETE SET NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_trips_user_id
+      ON trips(user_id)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_trips_status
+      ON trips(status)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE sync_queue (
+        id TEXT PRIMARY KEY,
+        table_name TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT,
+        created_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_sync_queue_created_at
+      ON sync_queue(created_at)
     ''');
   }
 
@@ -77,10 +110,15 @@ class SQLiteHelper {
     );
   }
 
-  Future<List<Map<String, dynamic>>> getDestinations() async {
+  Future<List<Map<String, dynamic>>> getDestinations(String userId) async {
     final db = await instance.database;
 
-    return await db.query('destinations');
+    return await db.query(
+      'destinations',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'updated_at DESC',
+    );
   }
 
   Future<Map<String, dynamic>?> getDestinationsById(int id) async {
@@ -96,25 +134,131 @@ class SQLiteHelper {
   }
 
   // UPDATE
-  Future<int> updateDestination(String id, String name) async {
+  Future<int> updateDestination(String id, String name, String userId) async {
     final db = await instance.database;
 
     return await db.update(
       'destinations',
       {'name': name.trim()},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [id, userId],
     );
   }
 
   //
-  Future<int> deleteDestination(WakeDestination destination) async {
+  Future<int> deleteDestination(
+    WakeDestination destination,
+    String userId,
+  ) async {
     final db = await instance.database;
 
     return await db.delete(
       'destinations',
-      where: 'id = ?',
-      whereArgs: [destination.id],
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [destination.id, userId],
+    );
+  }
+
+  Future<void> insertTrip({
+    required Map<String, dynamic> trip,
+    required Map<String, dynamic> cloudPayload,
+    required String queueId,
+  }) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      await txn.insert(
+        'trips',
+        trip,
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+
+      await txn.insert('sync_queue', {
+        'id': queueId,
+        'table_name': 'trips',
+        'record_id': trip['id'],
+        'operation': 'upsert',
+        'payload': cloudPayload.toString(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getTrips(String userId) async {
+    final db = await database;
+
+    return db.query(
+      'trips',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'started_at DESC',
+    );
+  }
+
+  Future<Map<String, dynamic>?> getActiveTrip(String userId) async {
+    final db = await database;
+
+    final results = await db.query(
+      'trips',
+      where: 'user_id = ? AND status = ?',
+      whereArgs: [userId, 'active'],
+      orderBy: 'started_at DESC',
+      limit: 1,
+    );
+
+    return results.isEmpty ? null : results.first;
+  }
+
+  Future<void> completeTrip({
+    required String tripId,
+    required Map<String, dynamic> cloudPayload,
+    required String queueId,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+
+    await db.transaction((txn) async {
+      await txn.update(
+        'trips',
+        {
+          'status': 'completed',
+          'completed_at': now,
+          'updated_at': now,
+          'alarm_triggered': cloudPayload['alarm_triggered'] == true ? 1 : 0,
+        },
+        where: 'id = ?',
+        whereArgs: [tripId],
+      );
+
+      await txn.insert('sync_queue', {
+        'id': queueId,
+        'table_name': 'trips',
+        'record_id': tripId,
+        'operation': 'upsert',
+        'payload': cloudPayload.toString(),
+        'created_at': now,
+      });
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingSyncItems() async {
+    final db = await database;
+
+    return db.query('sync_queue', orderBy: 'created_at ASC');
+  }
+
+  Future<void> removeSyncItem(String id) async {
+    final db = await database;
+
+    await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> incrementSyncAttempts(String id) async {
+    final db = await database;
+
+    await db.rawUpdate(
+      'UPDATE sync_queue SET attempts = attempts + 1 WHERE id = ?',
+      [id],
     );
   }
 

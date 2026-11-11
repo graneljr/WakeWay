@@ -2,12 +2,19 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakeway/features/auth/repositories/authentication_repository.dart';
 import 'package:wakeway/features/destinations/repositories/destination_repository.dart';
 import 'package:wakeway/features/map/models/wake_destination.dart';
 
 class DestinationViewModel extends ChangeNotifier {
-  DestinationViewModel({DestinationRepository? repository})
-    : _repository = repository ?? DestinationRepository();
+  DestinationViewModel({
+    DestinationRepository? repository,
+    AuthenticationRepository? authenticationRepository,
+  }) : _repository =
+           repository ??
+           DestinationRepository(
+             authenticationRepository: authenticationRepository,
+           );
 
   static const _legacyDestinationsKey = 'wakeway.destinations.v1';
 

@@ -3,7 +3,10 @@ import 'package:wakeway/features/auth/models/user_model.dart';
 import 'package:wakeway/features/auth/repositories/authentication_repository.dart';
 
 class AuthenticationViewModel extends ChangeNotifier {
-  final AuthenticationRepository _authRepository = AuthenticationRepository();
+  AuthenticationViewModel({AuthenticationRepository? authRepository})
+    : _authRepository = authRepository ?? AuthenticationRepository();
+
+  final AuthenticationRepository _authRepository;
   String _name = '';
   String _email = '';
   String _password = '';
@@ -16,6 +19,8 @@ class AuthenticationViewModel extends ChangeNotifier {
   String get password => _password;
   bool get isLoading => _isLoading;
   Map<String, dynamic>? get errorMessage => _errorMessage;
+  String? get currentUserId => _authRepository.currentUserId;
+  AuthenticationRepository get authenticationRepository => _authRepository;
 
   // 3. UI State Setters
   void updateName(String value) {

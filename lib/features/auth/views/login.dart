@@ -55,7 +55,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (error == null || error['status'] == 200) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => HomeShell(controller: WakeWayViewModel()),
+          builder: (_) => HomeShell(
+            controller: WakeWayViewModel(
+              authenticationRepository: _auth.authenticationRepository,
+            ),
+          ),
         ),
       );
     }

@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -8,116 +9,142 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+
+import 'package:wakeway/core/database/sqlite_helper.dart';
+import 'package:wakeway/features/auth/repositories/authentication_repository.dart';
 import 'package:wakeway/features/map/models/wake_destination.dart';
+import 'package:wakeway/features/trips/models/trips.dart';
 import 'package:wakeway/features/trips/models/wake_trip_options.dart';
 import 'package:wakeway/features/trips/models/wake_trip_record.dart';
 
+
+
+
 class WakeWayViewModel extends ChangeNotifier {
-  /// Creates the WakeWay application ViewModel.
-  WakeWayViewModel();
+  WakeWayViewModel({
+    String? Function()? currentUserId,
+    AuthenticationRepository? authenticationRepository,
+  }) : _currentUserId = currentUserId,
+       _authenticationRepository =
+           authenticationRepository ?? AuthenticationRepository();
 
   static const _tripsKey = 'wakeway.trips.v1';
   static const _settingsKey = 'wakeway.settings.v1';
   static const _searchCacheKey = 'wakeway.placeSearchCache.v1';
 
+  final String? Function()? _currentUserId;
+  final AuthenticationRepository _authenticationRepository;
+
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+
   final AudioPlayer _alarmPlayer = AudioPlayer();
+
   static const MethodChannel _audioPickerChannel = MethodChannel(
     'com.example.wakeway/audio_picker',
   );
+
+  static const Uuid _uuid = Uuid();
+
+  final SQLiteHelper _database = SQLiteHelper.instance;
+
   final List<WakeTripRecord> _trips = [];
+
   final Map<String, List<WakeDestination>> _placeSearchCache = {};
+
   StreamSubscription<Position>? _positionSubscription;
   Timer? _snoozeTimer;
+
   SharedPreferences? _preferences;
   DateTime? _nextPlaceSearchAt;
 
+  WakeTrip? _activeTrip;
+
   WakeDestination? activeDestination;
   Position? currentPosition;
+
   double? distanceToAlarmMeters;
   DateTime? tripStartedAt;
+
   String locationPermissionStatus = 'Not checked';
+
   bool locationServicesEnabled = false;
   bool notificationsEnabled = false;
   bool isMonitoring = false;
   bool alarmIsRinging = false;
   bool alarmIsSnoozed = false;
   bool warningWasShown = false;
+
   bool _alarmTriggeredInTrip = false;
+
   int alarmEventCount = 0;
+
   String? lastError;
+
   double alarmLatitude = 0;
   double alarmLongitude = 0;
+
   int radiusMeters = 300;
   int warningDistanceMeters = 1500;
+
   bool vibrationEnabled = true;
   bool repeatAlarm = true;
+
   int snoozeMinutes = 5;
+
   String alarmSound = 'WakeWay alarm';
   String? customAlarmSoundPath;
+
   bool offlineMode = false;
   bool useMetricUnits = true;
   bool batteryTipsEnabled = true;
 
-  /// Returns the trip history.
+  // ---------------------------------------------------------------------------
+  // GETTERS
+  // ---------------------------------------------------------------------------
+
   List<WakeTripRecord> get trips => List.unmodifiable(_trips);
 
-  /// Indicates whether the alarm is ringing or snoozed.
+  AuthenticationRepository get authenticationRepository =>
+      _authenticationRepository;
+
+  String? get currentUserId {
+    if (_currentUserId != null) return _currentUserId();
+    return _authenticationRepository.currentUserId;
+  }
+
   bool get isAlarmActive => alarmIsRinging || alarmIsSnoozed;
 
-  /// Indicates whether location services and permission are ready.
+  String? get activeTripId => _activeTrip?.id;
+
   bool get locationReady =>
       locationServicesEnabled &&
       (locationPermissionStatus == 'whileInUse' ||
           locationPermissionStatus == 'always');
 
-  /// Loads saved data and checks notification and location status.
+  String get activeDestinationName =>
+      _activeTrip?.destinationName ??
+      activeDestination?.name ??
+      'Custom location';
+
+  // ---------------------------------------------------------------------------
+  // INITIALIZATION
+  // ---------------------------------------------------------------------------
+
   Future<void> initialize() async {
     _preferences = await SharedPreferences.getInstance();
-    final tripJson = _preferences!.getString(_tripsKey);
-    if (tripJson != null) {
-      _trips.addAll(
-        (jsonDecode(tripJson) as List<dynamic>).map(
-          (item) => WakeTripRecord.fromJson(item as Map<String, dynamic>),
-        ),
-      );
-    }
 
-    final searchCacheJson = _preferences!.getString(_searchCacheKey);
-    if (searchCacheJson != null) {
-      final cached = jsonDecode(searchCacheJson) as Map<String, dynamic>;
-      for (final entry in cached.entries) {
-        _placeSearchCache[entry.key] = (entry.value as List<dynamic>)
-            .map(
-              (item) => WakeDestination.fromJson(item as Map<String, dynamic>),
-            )
-            .toList();
-      }
-    }
-
-    final settings = _preferences!.getString(_settingsKey);
-    if (settings != null) {
-      final values = jsonDecode(settings) as Map<String, dynamic>;
-      radiusMeters = values['radiusMeters'] as int? ?? radiusMeters;
-      warningDistanceMeters =
-          values['warningDistanceMeters'] as int? ?? warningDistanceMeters;
-      vibrationEnabled = values['vibrationEnabled'] as bool? ?? true;
-      repeatAlarm = values['repeatAlarm'] as bool? ?? true;
-      snoozeMinutes = values['snoozeMinutes'] as int? ?? snoozeMinutes;
-      alarmSound = values['alarmSound'] as String? ?? alarmSound;
-      customAlarmSoundPath = values['customAlarmSoundPath'] as String?;
-      offlineMode = values['offlineMode'] as bool? ?? offlineMode;
-      useMetricUnits = values['useMetricUnits'] as bool? ?? useMetricUnits;
-      batteryTipsEnabled =
-          values['batteryTipsEnabled'] as bool? ?? batteryTipsEnabled;
-    }
+    await _loadSearchCache();
+    await _loadSettings();
+    await _loadTripHistory();
 
     await _notifications.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
     );
+
     notificationsEnabled =
         await _notifications
             .resolvePlatformSpecificImplementation<
@@ -125,112 +152,356 @@ class WakeWayViewModel extends ChangeNotifier {
             >()
             ?.areNotificationsEnabled() ??
         false;
-    locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
+
+    locationServicesEnabled =
+        await Geolocator.isLocationServiceEnabled();
+
     final permission = await Geolocator.checkPermission();
     locationPermissionStatus = permission.name;
+
     notifyListeners();
   }
 
-  /// Searches for places and caches the results.
+  Future<void> _loadTripHistory() async {
+    final userId = currentUserId;
+
+    if (userId == null) return;
+
+    final rows = await _database.getTrips(userId);
+
+    _trips.clear();
+
+    for (final row in rows) {
+      final completedAt = row['completed_at'];
+
+      if (completedAt == null) continue;
+
+      _trips.add(
+        WakeTripRecord(
+          destination: row['destination_name'] as String,
+          startedAt: DateTime.parse(row['started_at'] as String),
+          endedAt: DateTime.parse(completedAt as String),
+          alarmTriggered: row['alarm_triggered'] == 1,
+        ),
+      );
+    }
+
+    if (_trips.length > 100) {
+      _trips.removeRange(100, _trips.length);
+    }
+  }
+
+  Future<void> _loadSearchCache() async {
+    final searchCacheJson =
+        _preferences?.getString(_searchCacheKey);
+
+    if (searchCacheJson == null) return;
+
+    final cached = jsonDecode(searchCacheJson) as Map<String, dynamic>;
+
+    for (final entry in cached.entries) {
+      _placeSearchCache[entry.key] =
+          (entry.value as List<dynamic>)
+              .map(
+                (item) => WakeDestination.fromJson(
+                  item as Map<String, dynamic>,
+                ),
+              )
+              .toList();
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    final settingsJson = _preferences?.getString(_settingsKey);
+
+    if (settingsJson == null) return;
+
+    final values = jsonDecode(settingsJson) as Map<String, dynamic>;
+
+    radiusMeters = values['radiusMeters'] as int? ?? radiusMeters;
+
+    warningDistanceMeters =
+        values['warningDistanceMeters'] as int? ??
+        warningDistanceMeters;
+
+    vibrationEnabled =
+        values['vibration_enabled'] as bool? ?? vibrationEnabled;
+
+    repeatAlarm =
+        values['repeat_alarm'] as bool? ?? repeatAlarm;
+
+    snoozeMinutes =
+        values['snooze_minutes'] as int? ?? snoozeMinutes;
+
+    alarmSound =
+        values['alarm_sound'] as String? ?? alarmSound;
+
+    customAlarmSoundPath =
+        values['custom_alarm_sound_path'] as String?;
+
+    offlineMode =
+        values['offline_mode'] as bool? ?? offlineMode;
+
+    useMetricUnits =
+        values['use_metric_units'] as bool? ?? useMetricUnits;
+
+    batteryTipsEnabled =
+        values['batteryTipsEnabled'] as bool? ?? batteryTipsEnabled;
+  }
+
+  // ---------------------------------------------------------------------------
+  // PLACE SEARCH
+  // ---------------------------------------------------------------------------
+
   Future<List<WakeDestination>> searchPlaces(String query) async {
     final term = query.trim();
+
     if (term.length < 3) return const [];
+
     final cacheKey = term.toLowerCase();
+
     final cached = _placeSearchCache[cacheKey];
+
     if (cached != null) return cached;
 
     final now = DateTime.now();
-    final nextAllowed = _nextPlaceSearchAt ?? now;
-    _nextPlaceSearchAt = nextAllowed.add(const Duration(seconds: 1));
-    final wait = nextAllowed.difference(now);
-    if (wait > Duration.zero) await Future<void>.delayed(wait);
 
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    final nextAllowed = _nextPlaceSearchAt ?? now;
+
+    _nextPlaceSearchAt = nextAllowed.add(
+      const Duration(seconds: 1),
+    );
+
+    final wait = nextAllowed.difference(now);
+
+    if (wait > Duration.zero) {
+      await Future<void>.delayed(wait);
+    }
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 8);
+
     try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': term,
-        'format': 'jsonv2',
-        'limit': '6',
-      });
+      final uri = Uri.https(
+        'nominatim.openstreetmap.org',
+        '/search',
+        {
+          'q': term,
+          'format': 'jsonv2',
+          'limit': '6',
+        },
+      );
+
       final request = await client.getUrl(uri);
-      request.headers.set(HttpHeaders.userAgentHeader, 'WakeWay/1.0 Android');
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'WakeWay/1.0 Android',
+      );
+
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/json',
+      );
+
       final response = await request.close().timeout(
         const Duration(seconds: 12),
       );
+
       if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('Place search returned ${response.statusCode}.');
+        throw HttpException(
+          'Place search returned ${response.statusCode}.',
+        );
       }
+
       final body = await response.transform(utf8.decoder).join();
+
       final results = (jsonDecode(body) as List<dynamic>)
           .map(
-            (item) =>
-                WakeDestination.fromSearchResult(item as Map<String, dynamic>),
+            (item) => WakeDestination.fromSearchResult(
+              item as Map<String, dynamic>,
+            ),
           )
           .toList();
+
       _placeSearchCache[cacheKey] = results;
+
       while (_placeSearchCache.length > 50) {
-        _placeSearchCache.remove(_placeSearchCache.keys.first);
+        _placeSearchCache.remove(
+          _placeSearchCache.keys.first,
+        );
       }
+
       await _preferences?.setString(
         _searchCacheKey,
         jsonEncode(
           _placeSearchCache.map(
-            (key, places) =>
-                MapEntry(key, places.map((place) => place.toJson()).toList()),
+            (key, places) => MapEntry(
+              key,
+              places.map((place) => place.toJson()).toList(),
+            ),
           ),
         ),
       );
+
       return results;
     } finally {
       client.close(force: true);
     }
   }
 
-  /// Gets the device's current location.
+  // ---------------------------------------------------------------------------
+  // LOCATION
+  // ---------------------------------------------------------------------------
+
   Future<Position> locateOnce() async {
     await _ensureLocationPermission();
+
     final position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
         timeLimit: Duration(seconds: 20),
       ),
     );
+
     currentPosition = position;
     locationServicesEnabled = true;
     lastError = null;
+
     notifyListeners();
+
     return position;
   }
 
-  /// Updates the location permission and service status.
   Future<void> refreshPermissionStatus() async {
-    locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
-    locationPermissionStatus = (await Geolocator.checkPermission()).name;
+    locationServicesEnabled =
+        await Geolocator.isLocationServiceEnabled();
+
+    locationPermissionStatus =
+        (await Geolocator.checkPermission()).name;
+
     notifyListeners();
   }
 
-  /// Requests permission to show notifications.
   Future<void> requestNotificationPermission() async {
     final android = _notifications
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
+
     notificationsEnabled =
         await android?.requestNotificationsPermission() ?? true;
+
     notifyListeners();
   }
 
-  /// Starts monitoring a trip and its alarm point.
+  Future<void> _ensureLocationPermission() async {
+    locationServicesEnabled =
+        await Geolocator.isLocationServiceEnabled();
+
+    if (!locationServicesEnabled) {
+      final opened = await Geolocator.openLocationSettings();
+
+      if (!opened) {
+        throw StateError(
+          'Turn on device location to start a trip.',
+        );
+      }
+
+      locationServicesEnabled =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!locationServicesEnabled) {
+        throw StateError(
+          'Turn on device location to start a trip.',
+        );
+      }
+    }
+
+    var permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    locationPermissionStatus = permission.name;
+
+    if (permission == LocationPermission.denied) {
+      throw StateError(
+        'Allow location access to monitor your trip.',
+      );
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      await Geolocator.openAppSettings();
+
+      throw StateError(
+        'Allow location access in app settings, then try again.',
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // START TRIP
+  // ---------------------------------------------------------------------------
+
+  /// Starts a trip using either a saved destination or custom map location.
+  ///
+  /// [destination] provides the displayed location information.
+  /// [savedDestinationId] should only be provided when the user selected
+  /// an actual saved destination.
+  ///
+  /// For a custom location, leave [savedDestinationId] null and provide
+  /// [alarmLat] and [alarmLon].
   Future<void> startTrip({
-    required WakeDestination destination,
+    WakeDestination? destination,
     required WakeTripOptions options,
+    String? savedDestinationId,
     double? alarmLat,
     double? alarmLon,
+    String? locationName,
+    String? address,
   }) async {
-    if (isMonitoring) throw StateError('A trip is already being monitored.');
+    if (isMonitoring) {
+      throw StateError(
+        'A trip is already being monitored.',
+      );
+    }
+
+    final userId = currentUserId;
+
+    if (userId == null) {
+      throw StateError(
+        'Sign in before starting a trip.',
+      );
+    }
+
+    // Resolve the alarm coordinates.
+    final double? resolvedLat = options.useAdvancePoint
+        ? options.advanceLatitude
+        : (alarmLat ?? destination?.latitude);
+
+    final double? resolvedLon = options.useAdvancePoint
+        ? options.advanceLongitude
+        : (alarmLon ?? destination?.longitude);
+
+    if (resolvedLat == null || resolvedLon == null) {
+      throw ArgumentError(
+        'A valid alarm location must be provided.',
+      );
+    }
+
+    if (options.useAdvancePoint &&
+        (options.advanceLatitude == null ||
+            options.advanceLongitude == null)) {
+      throw ArgumentError(
+        'Select a valid advance alarm point.',
+      );
+    }
+
     await _ensureLocationPermission();
     await requestNotificationPermission();
+
     final position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -238,98 +509,187 @@ class WakeWayViewModel extends ChangeNotifier {
       ),
     );
 
+    final now = DateTime.now();
+
+    final tripName =
+        locationName ??
+        destination?.name ??
+        'Custom location';
+
+    final tripAddress =
+        address ?? destination?.address;
+
+    final trip = WakeTrip(
+      id: _uuid.v4(),
+      userId: userId,
+      destinationId: savedDestinationId,
+      destinationName: tripName,
+      destinationAddress: tripAddress,
+      alarmLatitude: resolvedLat,
+      alarmLongitude: resolvedLon,
+      radiusMeters: options.radiusMeters,
+      warningDistanceMeters: options.warningDistanceMeters,
+      vibrationEnabled: options.vibration,
+      repeatAlarm: options.repeatAlarm,
+      snoozeMinutes: options.snoozeMinutes,
+      alarmSound: options.alarmSound,
+      customAlarmSoundPath: options.alarmSoundPath,
+      useAdvancePoint: options.useAdvancePoint,
+      status: 'active',
+      startedAt: now,
+      alarmTriggered: false,
+      updatedAt: now,
+    );
+
+    // Save trip and sync queue atomically before starting GPS monitoring.
+    await _database.insertTrip(
+      trip: trip.toLocalJson(),
+      cloudPayload: trip.toCloudJson(),
+      queueId: _uuid.v4(),
+    );
+
+    _activeTrip = trip;
+
     activeDestination = destination;
-    alarmLatitude = alarmLat ?? destination.latitude;
-    alarmLongitude = alarmLon ?? destination.longitude;
+
+    alarmLatitude = resolvedLat;
+    alarmLongitude = resolvedLon;
+
     radiusMeters = options.radiusMeters;
     warningDistanceMeters = options.warningDistanceMeters;
+
     vibrationEnabled = options.vibration;
     repeatAlarm = options.repeatAlarm;
     snoozeMinutes = options.snoozeMinutes;
+
     alarmSound = options.alarmSound;
     customAlarmSoundPath = options.alarmSoundPath;
+    vibrationEnabled = options.vibration;
     currentPosition = position;
+
     distanceToAlarmMeters = Geolocator.distanceBetween(
       position.latitude,
       position.longitude,
       alarmLatitude,
       alarmLongitude,
     );
-    tripStartedAt = DateTime.now();
+
+    tripStartedAt = now;
+
     isMonitoring = true;
+
     alarmIsRinging = false;
     alarmIsSnoozed = false;
     warningWasShown = false;
+
     _alarmTriggeredInTrip = false;
+
     lastError = null;
+
     await _saveSettings();
+
     notifyListeners();
 
     final LocationSettings settings =
         defaultTargetPlatform == TargetPlatform.android
-        ? AndroidSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-            intervalDuration: const Duration(seconds: 5),
-            foregroundNotificationConfig: const ForegroundNotificationConfig(
-              notificationTitle: 'WakeWay is monitoring your trip',
-              notificationText: 'Location is used to alert you near your stop.',
-              notificationChannelName: 'Trip monitoring',
-              enableWakeLock: true,
-              setOngoing: true,
-            ),
-          )
-        : const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          );
-    _positionSubscription =
-        Geolocator.getPositionStream(locationSettings: settings).listen(
-          _onPosition,
-          onError: (Object error) {
-            lastError = 'GPS updates stopped: $error';
-            notifyListeners();
-          },
-        );
-    _onPosition(position);
+            ? AndroidSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 10,
+                intervalDuration: const Duration(seconds: 5),
+                foregroundNotificationConfig:
+                    const ForegroundNotificationConfig(
+                  notificationTitle:
+                      'WakeWay is monitoring your trip',
+                  notificationText:
+                      'Location is used to alert you near your stop.',
+                  notificationChannelName: 'Trip monitoring',
+                  enableWakeLock: true,
+                  setOngoing: true,
+                ),
+              )
+            : const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 10,
+              );
+
+    try {
+      _positionSubscription =
+          Geolocator.getPositionStream(
+        locationSettings: settings,
+      ).listen(
+        _onPosition,
+        onError: (Object error) {
+          lastError = 'GPS updates stopped: $error';
+          notifyListeners();
+        },
+      );
+
+      _onPosition(position);
+    } catch (error) {
+      // Keep the trip record for recovery and troubleshooting.
+      lastError = 'Could not start GPS monitoring: $error';
+      isMonitoring = false;
+      notifyListeners();
+      rethrow;
+    }
   }
 
-  /// Updates distance and checks whether to show a warning or trigger the alarm.
+  // ---------------------------------------------------------------------------
+  // GPS MONITORING
+  // ---------------------------------------------------------------------------
+
   void _onPosition(Position position) {
-    if (!isMonitoring || activeDestination == null) return;
+    if (!isMonitoring) return;
+
     currentPosition = position;
+
     distanceToAlarmMeters = Geolocator.distanceBetween(
       position.latitude,
       position.longitude,
       alarmLatitude,
       alarmLongitude,
     );
+
     final distance = distanceToAlarmMeters!;
+
     if (!warningWasShown &&
         distance <= warningDistanceMeters &&
         distance > radiusMeters) {
       warningWasShown = true;
-      unawaited(_showProximityNotification(distance));
+
+      unawaited(
+        _showProximityNotification(distance),
+      );
     }
-    if (!alarmIsRinging && !alarmIsSnoozed && distance <= radiusMeters) {
+
+    if (!alarmIsRinging &&
+        !alarmIsSnoozed &&
+        distance <= radiusMeters) {
       unawaited(_ringAlarm());
     }
+
     notifyListeners();
   }
 
-  /// Shows a notification when the destination is getting close.
-  Future<void> _showProximityNotification(double distance) async {
+  // ---------------------------------------------------------------------------
+  // NOTIFICATIONS
+  // ---------------------------------------------------------------------------
+
+  Future<void> _showProximityNotification(
+    double distance,
+  ) async {
     try {
       await _notifications.show(
         id: 701,
         title: 'Your stop is getting close',
         body:
-            '${_formatDistance(distance)} from ${activeDestination?.name ?? 'your destination'}',
+            '${_formatDistance(distance)} from $activeDestinationName',
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'wakeway_proximity',
             'Approaching destination',
-            channelDescription: 'A heads up before your WakeWay alarm point.',
+            channelDescription:
+                'A heads up before your WakeWay alarm point.',
             importance: Importance.high,
             priority: Priority.high,
             enableVibration: true,
@@ -337,25 +697,37 @@ class WakeWayViewModel extends ChangeNotifier {
         ),
       );
     } on Object catch (error) {
-      lastError = 'Could not show the proximity notification: $error';
+      lastError =
+          'Could not show the proximity notification: $error';
       notifyListeners();
     }
   }
 
-  /// Starts the alarm sound, vibration, and notification.
+  // ---------------------------------------------------------------------------
+  // ALARM
+  // ---------------------------------------------------------------------------
+
   Future<void> _ringAlarm() async {
+    if (alarmIsRinging || !isMonitoring) return;
+
     alarmIsRinging = true;
     alarmIsSnoozed = false;
+
     _alarmTriggeredInTrip = true;
     alarmEventCount++;
+
     notifyListeners();
-    if (vibrationEnabled) HapticFeedback.vibrate();
+
+    if (vibrationEnabled) {
+      HapticFeedback.vibrate();
+    }
+
     try {
       await _notifications.show(
         id: 702,
         title: 'WakeWay: your stop is near',
         body:
-            'Wake up and get ready to get off at ${activeDestination?.name ?? 'your stop'}.',
+            'Wake up and get ready to get off at $activeDestinationName.',
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'wakeway_alarm_v2',
@@ -368,7 +740,14 @@ class WakeWayViewModel extends ChangeNotifier {
             fullScreenIntent: false,
             enableVibration: vibrationEnabled,
             vibrationPattern: vibrationEnabled
-                ? Int64List.fromList([0, 700, 350, 700, 350, 1000])
+                ? Int64List.fromList([
+                    0,
+                    700,
+                    350,
+                    700,
+                    350,
+                    1000,
+                  ])
                 : null,
             playSound: false,
             ongoing: true,
@@ -377,13 +756,16 @@ class WakeWayViewModel extends ChangeNotifier {
         ),
       );
     } on Object catch (error) {
-      lastError = 'Could not show the alarm notification: $error';
+      lastError =
+          'Could not show the alarm notification: $error';
       notifyListeners();
     }
+
     try {
       await _alarmPlayer.setReleaseMode(
         repeatAlarm ? ReleaseMode.loop : ReleaseMode.stop,
       );
+
       final source = customAlarmSoundPath == null
           ? AssetSource(
               alarmSound == 'Classic alarm'
@@ -391,6 +773,7 @@ class WakeWayViewModel extends ChangeNotifier {
                   : 'audio/wake_alarm.wav',
             )
           : DeviceFileSource(customAlarmSoundPath!);
+
       await _alarmPlayer.play(
         source,
         ctx: AudioContext(
@@ -408,241 +791,310 @@ class WakeWayViewModel extends ChangeNotifier {
     }
   }
 
-  /// Pauses the alarm and schedules it to ring again.
+  // ---------------------------------------------------------------------------
+  // SNOOZE
+  // ---------------------------------------------------------------------------
+
   Future<void> snoozeAlarm() async {
     if (!alarmIsRinging) return;
+
     await _alarmPlayer.stop();
+
     await _notifications.cancel(id: 702);
+
     alarmIsRinging = false;
     alarmIsSnoozed = true;
+
     _snoozeTimer?.cancel();
-    _snoozeTimer = Timer(Duration(minutes: snoozeMinutes), () {
-      if (isMonitoring && alarmIsSnoozed) unawaited(_ringAlarm());
-    });
+
+    _snoozeTimer = Timer(
+      Duration(minutes: snoozeMinutes),
+      () {
+        if (isMonitoring && alarmIsSnoozed) {
+          unawaited(_ringAlarm());
+        }
+      },
+    );
+
     notifyListeners();
   }
 
-  /// Stops the alarm by ending the trip.
-  Future<void> stopAlarm() => stopTrip(alarmTriggered: true);
+  Future<void> stopAlarm() =>
+      stopTrip(alarmTriggered: true);
 
-  /// Stops monitoring and saves the trip record.
-  Future<void> stopTrip({bool alarmTriggered = false}) async {
-    if (!isMonitoring) return;
+  // ---------------------------------------------------------------------------
+  // STOP TRIP
+  // ---------------------------------------------------------------------------
+
+  Future<void> stopTrip({
+    bool alarmTriggered = false,
+  }) async {
+    if (!isMonitoring || _activeTrip == null) return;
+
+    final trip = _activeTrip!;
+
     isMonitoring = false;
+
     _snoozeTimer?.cancel();
     _snoozeTimer = null;
+
     await _positionSubscription?.cancel();
     _positionSubscription = null;
+
     await _alarmPlayer.stop();
+
     await _notifications.cancel(id: 701);
     await _notifications.cancel(id: 702);
-    final startedAt = tripStartedAt;
-    final destination = activeDestination;
-    if (startedAt != null && destination != null) {
-      _trips.insert(
-        0,
-        WakeTripRecord(
-          destination: destination.name,
-          startedAt: startedAt,
-          endedAt: DateTime.now(),
-          alarmTriggered: alarmTriggered || _alarmTriggeredInTrip,
-        ),
-      );
-      if (_trips.length > 100) _trips.removeRange(100, _trips.length);
-      await _saveTrips();
+
+    final triggered =
+        alarmTriggered || _alarmTriggeredInTrip;
+
+    final now = DateTime.now();
+
+    // Build the completed cloud record.
+    final completedTrip = WakeTrip(
+      id: trip.id,
+      userId: trip.userId,
+      destinationId: trip.destinationId,
+      destinationName: trip.destinationName,
+      destinationAddress: trip.destinationAddress,
+      alarmLatitude: trip.alarmLatitude,
+      alarmLongitude: trip.alarmLongitude,
+      radiusMeters: trip.radiusMeters,
+      warningDistanceMeters: trip.warningDistanceMeters,
+      vibrationEnabled: trip.vibrationEnabled,
+      repeatAlarm: trip.repeatAlarm,
+      snoozeMinutes: trip.snoozeMinutes,
+      alarmSound: trip.alarmSound,
+      customAlarmSoundPath: trip.customAlarmSoundPath,
+      useAdvancePoint: trip.useAdvancePoint,
+      status: 'completed',
+      startedAt: trip.startedAt,
+      completedAt: now,
+      alarmTriggered: triggered,
+      updatedAt: now,
+    );
+
+    // Update SQLite and queue the cloud update atomically.
+    await _database.completeTrip(
+      tripId: trip.id,
+      cloudPayload: completedTrip.toCloudJson(),
+      queueId: _uuid.v4(),
+    );
+
+    _trips.insert(
+      0,
+      WakeTripRecord(
+        destination: trip.destinationName,
+        startedAt: trip.startedAt,
+        endedAt: now,
+        alarmTriggered: triggered,
+      ),
+    );
+
+    if (_trips.length > 100) {
+      _trips.removeRange(100, _trips.length);
     }
+
     alarmIsRinging = false;
     alarmIsSnoozed = false;
+
     _alarmTriggeredInTrip = false;
+
     activeDestination = null;
+    _activeTrip = null;
+
     tripStartedAt = null;
     distanceToAlarmMeters = null;
+
     notifyListeners();
   }
 
-  /// Changes the alarm distance radius.
+  // ---------------------------------------------------------------------------
+  // APP SETTINGS
+  // ---------------------------------------------------------------------------
+
   Future<void> setRadius(int value) async {
     radiusMeters = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Changes how far away the approach warning appears.
   Future<void> setWarningDistance(double kilometers) async {
     warningDistanceMeters = (kilometers * 1000).round();
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Selects a built-in alarm sound.
   Future<void> setAlarmSound(String value) async {
     final previousPath = customAlarmSoundPath;
+
     alarmSound = value;
     customAlarmSoundPath = null;
+
     await _saveSettings();
     await _removeUnusedAlarmSound(previousPath);
+
     notifyListeners();
   }
 
-  /// Opens device music selection.
-  Future<String?> pickDeviceMusic() => _pickCustomAlarmSound('pickDeviceMusic');
+  Future<String?> pickDeviceMusic() =>
+      _pickCustomAlarmSound('pickDeviceMusic');
 
-  /// Opens system ringtone selection.
   Future<String?> pickSystemRingtone() =>
       _pickCustomAlarmSound('pickSystemRingtone');
 
-  /// Handles audio selection and saves the chosen sound.
   Future<String?> _pickCustomAlarmSound(String method) async {
     if (defaultTargetPlatform != TargetPlatform.android) {
-      throw UnsupportedError('Device audio selection is available on Android.');
+      throw UnsupportedError(
+        'Device audio selection is available on Android.',
+      );
     }
+
     if (alarmIsRinging) {
-      throw StateError('Stop the active alarm before changing its sound.');
+      throw StateError(
+        'Stop the active alarm before changing its sound.',
+      );
     }
+
     final previousPath = customAlarmSoundPath;
-    final selection = await _audioPickerChannel.invokeMapMethod<String, String>(
+
+    final selection =
+        await _audioPickerChannel.invokeMapMethod<String, String>(
       method,
     );
+
     if (selection == null) return null;
+
     final path = selection['path'];
     final name = selection['name'];
-    if (path == null || path.isEmpty || name == null || name.isEmpty) {
-      throw StateError('The selected audio could not be loaded.');
+
+    if (path == null ||
+        path.isEmpty ||
+        name == null ||
+        name.isEmpty) {
+      throw StateError(
+        'The selected audio could not be loaded.',
+      );
     }
+
     alarmSound = name;
     customAlarmSoundPath = path;
+
     await _saveSettings();
+
     await _removeUnusedAlarmSound(previousPath);
+
     notifyListeners();
+
     return name;
   }
 
-  /// Deletes a previously selected audio file if it is no longer used.
   Future<void> _removeUnusedAlarmSound(String? path) async {
     if (path == null || alarmIsRinging) return;
+
     try {
       final file = File(path);
-      if (await file.exists()) await file.delete();
+
+      if (await file.exists()) {
+        await file.delete();
+      }
     } on FileSystemException {
-      // The new selection is already saved; a stale copy can be cleaned later.
+      // A stale file can be cleaned up later.
     }
   }
 
-  /// Turns alarm vibration on or off.
   Future<void> setVibration(bool value) async {
     vibrationEnabled = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Turns alarm sound repetition on or off.
   Future<void> setRepeatAlarm(bool value) async {
     repeatAlarm = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Changes the snooze time.
   Future<void> setSnoozeDuration(int value) async {
     snoozeMinutes = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Saves the offline mode setting.
   Future<void> setOfflineMode(bool value) async {
     offlineMode = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Chooses metric or imperial distance units.
   Future<void> setMetricUnits(bool value) async {
     useMetricUnits = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Turns battery tips on or off.
   Future<void> setBatteryTipsEnabled(bool value) async {
     batteryTipsEnabled = value;
     await _saveSettings();
     notifyListeners();
   }
 
-  /// Formats a distance using the selected units.
+  // ---------------------------------------------------------------------------
+  // DISTANCE FORMATTING
+  // ---------------------------------------------------------------------------
+
   String formatDistance(double? meters) {
     if (meters == null) return 'Waiting for GPS';
+
     if (!useMetricUnits) {
       final miles = meters / 1609.344;
+
       return miles >= .1
           ? '${miles.toStringAsFixed(1)} mi'
           : '${(meters * 3.28084).round()} ft';
     }
+
     return meters >= 1000
         ? '${(meters / 1000).toStringAsFixed(1)} km'
         : '${meters.round()} m';
   }
 
-  /// Formats a distance for internal use.
-  String _formatDistance(double meters) => formatDistance(meters);
+  String _formatDistance(double meters) =>
+      formatDistance(meters);
 
-  /// Checks location services and requests permission when needed.
-  Future<void> _ensureLocationPermission() async {
-    locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!locationServicesEnabled) {
-      final opened = await Geolocator.openLocationSettings();
-      if (!opened) throw StateError('Turn on device location to start a trip.');
-      locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!locationServicesEnabled) {
-        throw StateError('Turn on device location to start a trip.');
-      }
-    }
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    locationPermissionStatus = permission.name;
-    if (permission == LocationPermission.denied) {
-      throw StateError('Allow location access to monitor your trip.');
-    }
-    if (permission == LocationPermission.deniedForever) {
-      await Geolocator.openAppSettings();
-      throw StateError(
-        'Allow location access in app settings, then try again.',
-      );
-    }
+  // ---------------------------------------------------------------------------
+  // SAVE SETTINGS
+  // ---------------------------------------------------------------------------
+
+  Future<void> _saveSettings() async {
+    await _preferences?.setString(
+      _settingsKey,
+      jsonEncode({
+        'radiusMeters': radiusMeters,
+        'warningDistanceMeters': warningDistanceMeters,
+        'vibrationEnabled': vibrationEnabled,
+        'repeatAlarm': repeatAlarm,
+        'snoozeMinutes': snoozeMinutes,
+        'alarmSound': alarmSound,
+        'customAlarmSoundPath': customAlarmSoundPath,
+        'offlineMode': offlineMode,
+        'useMetricUnits': useMetricUnits,
+        'batteryTipsEnabled': batteryTipsEnabled,
+      }),
+    );
   }
 
-  /// Saves trip records to local preferences.
-  Future<void> _saveTrips() async => _preferences?.setString(
-    _tripsKey,
-    jsonEncode(_trips.map((item) => item.toJson()).toList()),
-  );
+  // ---------------------------------------------------------------------------
+  // DISPOSE
+  // ---------------------------------------------------------------------------
 
-  /// Saves app settings to local preferences.
-  Future<void> _saveSettings() async => _preferences?.setString(
-    _settingsKey,
-    jsonEncode({
-      'radiusMeters': radiusMeters,
-      'warningDistanceMeters': warningDistanceMeters,
-      'vibrationEnabled': vibrationEnabled,
-      'repeatAlarm': repeatAlarm,
-      'snoozeMinutes': snoozeMinutes,
-      'alarmSound': alarmSound,
-      'customAlarmSoundPath': customAlarmSoundPath,
-      'offlineMode': offlineMode,
-      'useMetricUnits': useMetricUnits,
-      'batteryTipsEnabled': batteryTipsEnabled,
-    }),
-  );
-
-  /// Cleans up location, timer, and audio resources.
   @override
   void dispose() {
     _positionSubscription?.cancel();
     _snoozeTimer?.cancel();
     _alarmPlayer.dispose();
+
     super.dispose();
   }
 }

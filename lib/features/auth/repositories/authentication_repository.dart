@@ -1,9 +1,12 @@
+
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:wakeway/core/storage/preferences_service.dart';
 import 'package:wakeway/features/auth/models/user_model.dart';
 
 class AuthenticationRepository {
-  final supabase = Supabase.instance.client;
+  AuthenticationRepository({SupabaseClient? client})
+    : supabase = client ?? Supabase.instance.client;
+
+  final SupabaseClient supabase;
 
   // REGISTER
   Future<Map<String, dynamic>?> createAccount(UserModel userModel) async {
@@ -53,7 +56,7 @@ class AuthenticationRepository {
       if (user == null || response.session == null) {
         return {'status': 401, 'message': 'Authentication failed'};
       }
-      await PreferencesService.saveUserId(user.id);
+
       return {
         'status': 200,
         'message': 'Login successful',
@@ -70,15 +73,21 @@ class AuthenticationRepository {
   // LOGOUT
   Future<void> logoutAccount() async {
     await supabase.auth.signOut();
-
-    await PreferencesService.clearUserId();
   }
 
-  // CURRENT USER
+  // CURRENT AUTHENTICATED USER
   User? get currentUser => supabase.auth.currentUser;
 
   // CURRENT USER ID
   String? get currentUserId => currentUser?.id;
+
+  String requireCurrentUserId() {
+    final userId = currentUserId;
+    if (userId == null) {
+      throw StateError('Sign in to continue.');
+    }
+    return userId;
+  }
 
   // AUTHENTICATION STATUS
   bool get isAuthenticated => currentUser != null;

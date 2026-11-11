@@ -21,7 +21,15 @@ class ActiveTripScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Trip in progress'),
-          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back,
+            ), 
+            onPressed: () {
+             Navigator.pop(context);
+            },
+          ),
+          automaticallyImplyLeading: true,
           actions: [
             StatusPill(
               label: controller.isMonitoring ? 'Tracking' : 'Stopped',
