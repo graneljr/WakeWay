@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:wakeway/core/storage/preferences_service.dart';
 import 'package:wakeway/features/auth/viewmodels/authentication_view_model.dart';
-import 'package:wakeway/features/auth/views/register.dart';
+import 'package:wakeway/features/auth/views/login.dart';
+import 'package:wakeway/features/auth/views/onboarding_screen.dart';
 import 'package:wakeway/features/navigation/views/home_shell.dart';
 import 'package:wakeway/features/wake/viewmodels/wakeway_view_model.dart';
 import 'package:wakeway/shared/ui.dart';
@@ -64,9 +66,15 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       );
     } else {
+      final hasCompletedOnboarding =
+          await PreferencesService.hasCompletedOnboarding();
+      if (!mounted) return;
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => RegisterScreen(controller: AuthenticationViewModel()),
+          builder: (_) => hasCompletedOnboarding
+              ? LoginScreen(controller: AuthenticationViewModel())
+              : const OnboardingScreen(),
         ),
       );
     }

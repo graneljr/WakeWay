@@ -8,6 +8,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseService.initialize();
   final authRepository = AuthenticationRepository();
+  await authRepository.initializeGoogleSignIn();
   final viewModel = WakeWayViewModel(
     authenticationRepository: authRepository,
   );

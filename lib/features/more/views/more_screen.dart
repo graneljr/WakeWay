@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:wakeway/core/security/shared_preference.dart';
 import 'package:wakeway/shared/components/menu_item.dart';
 import 'package:wakeway/shared/ui.dart';
 
 class MoreScreen extends StatelessWidget {
-  const MoreScreen({
+  MoreScreen({
     super.key,
     required this.onSaved,
     required this.onOfflineMaps,
@@ -18,6 +19,11 @@ class MoreScreen extends StatelessWidget {
   final VoidCallback onGpsStatus;
   final VoidCallback onHistory;
 
+String? userName;
+
+Future<void> loadUserName() async {
+  userName = await PreferencesService.getUserName();
+}
   @override
   Widget build(BuildContext context) => SafeArea(
     child: SingleChildScrollView(
@@ -39,12 +45,12 @@ class MoreScreen extends StatelessWidget {
                   child: Icon(Icons.person_rounded, color: WakeColors.blue),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Arman',
+                        userName.toString() ?? "Unknown User",
                         style: TextStyle(
                           color: WakeColors.ink,
                           fontSize: 15,

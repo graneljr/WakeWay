@@ -1,78 +1,87 @@
 
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:wakeway/features/auth/models/user_model.dart';
-
+import 'package:wakeway/core/storage/preferences_service.dart';
 class AuthenticationRepository {
-  AuthenticationRepository({SupabaseClient? client})
-    : supabase = client ?? Supabase.instance.client;
+  AuthenticationRepository({
+    SupabaseClient? client,
+    GoogleSignIn? googleSignIn,
+  }) : supabase = client ?? Supabase.instance.client,
+       _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
 
   final SupabaseClient supabase;
+  final GoogleSignIn _googleSignIn;
 
-  // REGISTER
-  Future<Map<String, dynamic>?> createAccount(UserModel userModel) async {
-    try {
-      if (userModel.password == null || userModel.password!.isEmpty) {
-        return {'status': 400, 'message': 'Password cannot be empty'};
-      }
+  // Replace with your Google Web OAuth Client ID.
+  static const String webClientId = '740358344602-vr4nr4ev6in3c6thdtb71ta4hno9hfqn.apps.googleusercontent.com';
 
-      final response = await supabase.auth.signUp(
-        email: userModel.email,
-        password: userModel.password!,
-        emailRedirectTo: 'wakeway://login-callback/',
-        data: {'name': userModel.name},
-      );
-
-      if (response.user == null) {
-        return {'status': 400, 'message': 'Registration failed'};
-      }
-
-      return {
-        'status': 201,
-        'message': 'User registered successfully',
-        'user_id': response.user!.id,
-        'email': response.user!.email,
-        'email_confirmation_required': response.session == null,
-      };
-    } on AuthException catch (e) {
-      return {'status': 400, 'message': e.message};
-    } catch (e) {
-      return {'status': 500, 'message': 'Unexpected system error'};
-    }
+  // Initialize once during application startup.
+  Future<void> initializeGoogleSignIn() async {
+    await _googleSignIn.initialize(
+      serverClientId: webClientId,
+    );
   }
 
-  // LOGIN
-  Future<Map<String, dynamic>?> loginAccount(
-    String email,
-    String password,
-  ) async {
+  // GOOGLE LOGIN / REGISTRATION
+  Future<Map<String, dynamic>> loginWithGoogle() async {
     try {
-      final response = await supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
+      final googleUser = await _googleSignIn.authenticate();
+
+      final googleAuthentication = googleUser.authentication;
+      final idToken = googleAuthentication.idToken;
+
+      if (idToken == null) {
+        return {
+          'status': 401,
+          'message': 'Google did not provide an ID token.',
+        };
+      }
+
+      final response = await supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
       );
 
       final user = response.user;
 
       if (user == null || response.session == null) {
-        return {'status': 401, 'message': 'Authentication failed'};
+        return {
+          'status': 401,
+          'message': 'Google authentication failed.',
+        };
       }
-
+      
+      await PreferencesService.saveUserName(user.userMetadata?['full_name'] ?? 'Unknown User');
       return {
         'status': 200,
-        'message': 'Login successful',
+        'message': 'Google login successful.',
         'user_id': user.id,
         'email': user.email,
+        'name': user.userMetadata?['full_name'],
+        'avatar': user.userMetadata?['avatar_url'],
+      };
+    } on GoogleSignInException catch (e) {
+      return {
+        'status': 400,
+        'message': e.description ?? 'Google sign-in was cancelled or failed.',
       };
     } on AuthException catch (e) {
-      return {'status': 401, 'message': e.message};
+      return {
+        'status': 401,
+        'message': e.message,
+      };
     } catch (e) {
-      return {'status': 500, 'message': 'Unexpected system error'};
+      return {
+        'status': 500,
+        'message': 'Unexpected authentication error: $e',
+      };
     }
   }
 
   // LOGOUT
   Future<void> logoutAccount() async {
     await supabase.auth.signOut();
+    await _googleSignIn.signOut();
   }
 
   // CURRENT AUTHENTICATED USER
@@ -83,9 +92,11 @@ class AuthenticationRepository {
 
   String requireCurrentUserId() {
     final userId = currentUserId;
+
     if (userId == null) {
       throw StateError('Sign in to continue.');
     }
+
     return userId;
   }
 

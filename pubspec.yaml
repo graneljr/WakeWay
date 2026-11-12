@@ -50,6 +50,7 @@ dependencies:
   cryptography: ^2.9.0
   crypto: ^3.0.8
   path: ^1.9.1
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
