@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:wakeway/core/database/data_sync_service.dart';
+import 'package:wakeway/core/updates/app_update_service.dart';
 import 'package:wakeway/features/destinations/viewmodels/destination_view_model.dart';
 import 'package:wakeway/features/destinations/views/saved_destinations_screen.dart';
 import 'package:wakeway/features/home/views/home_screen.dart';
@@ -31,9 +34,12 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   late final DestinationViewModel _destinationViewModel;
+  late final DataSyncService _dataSyncService;
+  late final AppUpdateService _appUpdateService;
   int _selectedIndex = 0;
   int _seenAlarmEventCount = 0;
   bool _alarmRouteShowing = false;
+  bool _isCheckingForUpdates = false;
 
   @override
   void initState() {
@@ -41,10 +47,197 @@ class _HomeShellState extends State<HomeShell> {
     _destinationViewModel = DestinationViewModel(
       authenticationRepository: widget.controller.authenticationRepository,
     );
-    unawaited(_destinationViewModel.initialize());
-    unawaited(widget.controller.initialize());
+    _dataSyncService = DataSyncService(
+      authenticationRepository: widget.controller.authenticationRepository,
+    );
+    _appUpdateService = AppUpdateService();
+    unawaited(_initializeData());
     _seenAlarmEventCount = widget.controller.alarmEventCount;
     widget.controller.addListener(_onControllerChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_checkForAppUpdates(showStatusWhenCurrent: false));
+    });
+  }
+
+  Future<void> _checkForAppUpdates({
+    required bool showStatusWhenCurrent,
+  }) async {
+    if (_isCheckingForUpdates) return;
+    if (!Platform.isAndroid) {
+      if (showStatusWhenCurrent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Install iOS updates through the App Store.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isCheckingForUpdates = true);
+    try {
+      if (!_appUpdateService.isConfigured) {
+        if (showStatusWhenCurrent && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Configure WAKEWAY_GITHUB_REPOSITORY to check for updates.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      final release = await _appUpdateService.checkForUpdate();
+      if (!mounted) return;
+      if (release == null) {
+        if (showStatusWhenCurrent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('WakeWay is up to date.')),
+          );
+        }
+        return;
+      }
+
+      final shouldUpdate = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(
+            Icons.system_update_alt_rounded,
+            color: WakeColors.blue,
+            size: 30,
+          ),
+          title: const Text('Update available'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'WakeWay ${release.version} is available. You have ${release.installedVersion}.',
+                  ),
+                  if (release.releaseNotes.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'What’s new',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(release.releaseNotes.trim()),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Update'),
+            ),
+          ],
+        ),
+      );
+      if (shouldUpdate != true || !mounted) return;
+
+      final canInstall = await _appUpdateService.canInstallPackages();
+      if (!canInstall) {
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Allow WakeWay to install updates'),
+            content: const Text(
+              'Android needs permission to install APK updates from WakeWay. Open the app-specific setting, enable “Allow from this source,” then return and check for updates again.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Later'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Open settings'),
+              ),
+            ],
+          ),
+        );
+        if (openSettings == true) {
+          await _appUpdateService.openInstallPermissionSettings();
+        }
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Downloading WakeWay ${release.version}…')),
+      );
+      final apkFile = await _appUpdateService.downloadApk(release);
+      if (!mounted) return;
+      await _appUpdateService.openApkInstaller(apkFile);
+    } on Object catch (error) {
+      if (!mounted || !showStatusWhenCurrent) return;
+      final message = error
+          .toString()
+          .replaceFirst('Exception: ', '')
+          .replaceFirst('Bad state: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not check for updates: $message')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCheckingForUpdates = false);
+    }
+  }
+
+  Future<void> _initializeData() async {
+    await Future.wait<void>([
+      _destinationViewModel.initialize(),
+      widget.controller.initialize(),
+    ]);
+    if (!mounted) return;
+
+    try {
+      await _dataSyncService.syncNow();
+      if (!mounted) return;
+      await Future.wait<void>([
+        _destinationViewModel.refreshFromLocal(),
+        widget.controller.refreshLocalTripData(),
+      ]);
+    } on Object {
+      // Keep the cached SQLite data available while offline; More can retry.
+    }
+  }
+
+  Future<void> _syncData() async {
+    try {
+      final summary = await _dataSyncService.syncNow();
+      if (!mounted) return;
+      await Future.wait<void>([
+        _destinationViewModel.refreshFromLocal(),
+        widget.controller.refreshLocalTripData(),
+      ]);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Synced ${summary.destinationCount} saved places and '
+            '${summary.tripCount} trips.',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      final message = error
+          .toString()
+          .replaceFirst('Exception: ', '')
+          .replaceFirst('Bad state: ', '');
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Sync failed: $message')));
+    }
   }
 
   @override
@@ -76,6 +269,12 @@ class _HomeShellState extends State<HomeShell> {
       _openDestination();
       return;
     }
+    final savedDestinationId =
+        _destinationViewModel.destinations.any(
+          (savedDestination) => savedDestination.id == target.id,
+        )
+        ? target.id
+        : null;
     _push(
       AlarmConfigScreen(
         destination: target,
@@ -90,6 +289,7 @@ class _HomeShellState extends State<HomeShell> {
             }
             await widget.controller.startTrip(
               destination: target,
+              savedDestinationId: savedDestinationId,
               options: options,
               alarmLat: options.useAdvancePoint
                   ? options.advanceLatitude
@@ -206,10 +406,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openMonitoringScreen() {
     _push(
-      ActiveTripScreen(
-        controller: widget.controller,
-        onStop: _confirmStopTrip,
-      ),
+      ActiveTripScreen(controller: widget.controller, onStop: _confirmStopTrip),
     );
   }
 
@@ -338,6 +535,10 @@ class _HomeShellState extends State<HomeShell> {
         onGpsStatus: () =>
             _push(GpsStatusScreen(controller: widget.controller)),
         onHistory: () => _setTab(2),
+        onSync: _syncData,
+        onCheckForUpdates: () =>
+            unawaited(_checkForAppUpdates(showStatusWhenCurrent: true)),
+        isCheckingForUpdates: _isCheckingForUpdates,
       ),
     ];
 

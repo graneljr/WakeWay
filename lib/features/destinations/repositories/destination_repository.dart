@@ -35,32 +35,28 @@ class DestinationRepository {
 
   Future<void> saveDestination(WakeDestination destination) async {
     final userId = requireUserId();
-    await _client
-        .from(_table)
-        .upsert(_toRow(destination, userId), onConflict: 'id');
-    await SQLiteHelper.instance.insertDestinations(<String, Object?>{
-      'id': destination.id,
-      'user_id': userId,
-      'name': destination.name,
-      'address': destination.address,
-      'latitude': destination.latitude,
-      'longitude': destination.longitude,
-      'updated_at': _now(),
+    final row = _toRow(destination, userId);
+    await SQLiteHelper.instance.insertDestinations({
+      ...row,
+      'sync_status': 'pending',
     });
+
+    try {
+      await _client.from(_table).upsert({
+        ...row,
+        'deleted_at': null,
+      }, onConflict: 'id');
+      await SQLiteHelper.instance.markDestinationSynced(destination.id, userId);
+    } on Object {
+      // Keep the local record available; the sync action can retry the upload.
+    }
   }
 
   Future<void> importLegacyDestinations(
     Iterable<WakeDestination> destinations,
   ) async {
-    final userId = requireUserId();
     for (final destination in destinations.toList().reversed) {
-      await _client
-          .from(_table)
-          .upsert(
-            _toRow(destination, userId),
-            onConflict: 'id',
-            ignoreDuplicates: true,
-          );
+      await saveDestination(destination);
     }
   }
 
@@ -69,26 +65,41 @@ class DestinationRepository {
     String name,
   ) async {
     final userId = requireUserId();
-    await _client
-        .from(_table)
-        .update({'name': name.trim(), 'updated_at': _now()})
-        .eq('id', destination.id)
-        .eq('user_id', userId);
+    final updatedAt = _now();
     await SQLiteHelper.instance.updateDestination(
       destination.id,
       name,
       userId,
+      updatedAt: updatedAt,
     );
+
+    try {
+      await _client.from(_table).upsert({
+        ..._toRow(destination, userId),
+        'name': name.trim(),
+        'updated_at': updatedAt,
+        'deleted_at': null,
+      }, onConflict: 'id');
+      await SQLiteHelper.instance.markDestinationSynced(destination.id, userId);
+    } on Object {
+      // The local rename remains authoritative until the next successful sync.
+    }
   }
 
   Future<void> removeDestination(WakeDestination destination) async {
     final userId = requireUserId();
-    await _client
-        .from(_table)
-        .delete()
-        .eq('id', destination.id)
-        .eq('user_id', userId);
     await SQLiteHelper.instance.deleteDestination(destination, userId);
+
+    final deletedAt = _now();
+    try {
+      await _client
+          .from(_table)
+          .update({'deleted_at': deletedAt, 'updated_at': deletedAt})
+          .eq('id', destination.id)
+          .eq('user_id', userId);
+    } on Object {
+      // The queued delete will be retried when the device is online.
+    }
   }
 
   Map<String, Object?> _toRow(WakeDestination destination, String userId) => {

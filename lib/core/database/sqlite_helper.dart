@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:wakeway/features/map/models/wake_destination.dart';
@@ -103,11 +105,58 @@ class SQLiteHelper {
   // INSERT
   Future<int> insertDestinations(Map<String, dynamic> destinations) async {
     final db = await instance.database;
+    final row = Map<String, Object?>.from(destinations);
 
-    return await db.insert(
+    return db.transaction((txn) async {
+      final inserted = await txn.insert(
+        'destinations',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      if (inserted != 0) return inserted;
+
+      return txn.update(
+        'destinations',
+        row,
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    });
+  }
+
+  Future<void> markDestinationSynced(String id, String userId) async {
+    final db = await database;
+    await db.update(
       'destinations',
-      Map<String, Object?>.from(destinations),
+      {'sync_status': 'synced'},
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [id, userId],
     );
+  }
+
+  Future<void> removeCloudDeletedDestinations({
+    required String userId,
+    required Set<String> destinationIds,
+  }) async {
+    if (destinationIds.isEmpty) return;
+    final db = await database;
+
+    await db.transaction((txn) async {
+      for (final id in destinationIds) {
+        final now = DateTime.now().toUtc().toIso8601String();
+        await txn.update(
+          'trips',
+          {'destination_id': null, 'updated_at': now},
+          where: 'destination_id = ? AND user_id = ?',
+          whereArgs: [id, userId],
+        );
+        await txn.delete(
+          'destinations',
+          where: 'id = ? AND user_id = ?',
+          whereArgs: [id, userId],
+        );
+      }
+    });
   }
 
   Future<List<Map<String, dynamic>>> getDestinations(String userId) async {
@@ -134,12 +183,17 @@ class SQLiteHelper {
   }
 
   // UPDATE
-  Future<int> updateDestination(String id, String name, String userId) async {
+  Future<int> updateDestination(
+    String id,
+    String name,
+    String userId, {
+    required String updatedAt,
+  }) async {
     final db = await instance.database;
 
     return await db.update(
       'destinations',
-      {'name': name.trim()},
+      {'name': name.trim(), 'updated_at': updatedAt, 'sync_status': 'pending'},
       where: 'id = ? AND user_id = ?',
       whereArgs: [id, userId],
     );
@@ -152,11 +206,122 @@ class SQLiteHelper {
   ) async {
     final db = await instance.database;
 
-    return await db.delete(
-      'destinations',
-      where: 'id = ? AND user_id = ?',
-      whereArgs: [destination.id, userId],
+    return db.transaction((txn) async {
+      final deleted = await txn.delete(
+        'destinations',
+        where: 'id = ? AND user_id = ?',
+        whereArgs: [destination.id, userId],
+      );
+      if (deleted == 0) return 0;
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      await txn.update(
+        'trips',
+        {'destination_id': null, 'updated_at': now},
+        where: 'destination_id = ? AND user_id = ?',
+        whereArgs: [destination.id, userId],
+      );
+      await txn.insert('sync_queue', {
+        'id':
+            'destination-delete-${destination.id}-${DateTime.now().microsecondsSinceEpoch}',
+        'table_name': 'destinations',
+        'record_id': destination.id,
+        'operation': 'delete',
+        'payload': jsonEncode({'user_id': userId}),
+        'created_at': now,
+      });
+      return deleted;
+    });
+  }
+
+  Future<void> applySyncedSnapshot({
+    required List<Map<String, dynamic>> destinations,
+    required List<Map<String, dynamic>> trips,
+  }) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      for (final destination in destinations) {
+        await _upsertRow(
+          txn,
+          'destinations',
+          Map<String, Object?>.from(destination),
+        );
+      }
+
+      for (final trip in trips) {
+        final localTrip = Map<String, Object?>.from(trip);
+        for (final key in const [
+          'vibration_enabled',
+          'repeat_alarm',
+          'use_advance_point',
+          'alarm_triggered',
+        ]) {
+          localTrip[key] = _toSqliteBool(localTrip[key]);
+        }
+
+        final existing = await txn.query(
+          'trips',
+          columns: const ['custom_alarm_sound_path'],
+          where: 'id = ?',
+          whereArgs: [localTrip['id']],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          localTrip['custom_alarm_sound_path'] =
+              existing.first['custom_alarm_sound_path'];
+        } else {
+          // File paths are device-local and cannot be restored on another phone.
+          localTrip['custom_alarm_sound_path'] = null;
+        }
+
+        await _upsertRow(txn, 'trips', localTrip);
+      }
+    });
+  }
+
+  Future<void> removeSyncItemsForRecords({
+    required String tableName,
+    required Set<String> recordIds,
+  }) async {
+    if (recordIds.isEmpty) return;
+    final db = await database;
+    final pending = await db.query(
+      'sync_queue',
+      columns: const ['id', 'record_id'],
+      where: 'table_name = ?',
+      whereArgs: [tableName],
     );
+
+    final idsToRemove = pending
+        .where((row) => recordIds.contains(row['record_id'] as String))
+        .map((row) => row['id'] as String)
+        .toList(growable: false);
+    for (final id in idsToRemove) {
+      await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+    }
+  }
+
+  Future<void> _upsertRow(
+    Transaction txn,
+    String table,
+    Map<String, Object?> row,
+  ) async {
+    final inserted = await txn.insert(
+      table,
+      row,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    if (inserted == 0) {
+      await txn.update(table, row, where: 'id = ?', whereArgs: [row['id']]);
+    }
+  }
+
+  int _toSqliteBool(Object? value) {
+    if (value == true || value == 1 || value == '1' || value == 'true') {
+      return 1;
+    }
+    return 0;
   }
 
   Future<void> insertTrip({
@@ -178,7 +343,7 @@ class SQLiteHelper {
         'table_name': 'trips',
         'record_id': trip['id'],
         'operation': 'upsert',
-        'payload': cloudPayload.toString(),
+        'payload': jsonEncode(cloudPayload),
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     });
@@ -246,7 +411,7 @@ class SQLiteHelper {
         'table_name': 'trips',
         'record_id': tripId,
         'operation': 'upsert',
-        'payload': cloudPayload.toString(),
+        'payload': jsonEncode(cloudPayload),
         'created_at': updatedAt,
       });
     });
@@ -278,7 +443,7 @@ class SQLiteHelper {
         'table_name': 'trips',
         'record_id': tripId,
         'operation': 'upsert',
-        'payload': cloudPayload.toString(),
+        'payload': jsonEncode(cloudPayload),
         'created_at': now,
       });
     });

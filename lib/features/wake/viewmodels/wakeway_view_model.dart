@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -17,9 +16,6 @@ import 'package:wakeway/features/map/models/wake_destination.dart';
 import 'package:wakeway/features/trips/models/trips.dart';
 import 'package:wakeway/features/trips/models/wake_trip_options.dart';
 import 'package:wakeway/features/trips/models/wake_trip_record.dart';
-
-
-
 
 class WakeWayViewModel extends ChangeNotifier {
   WakeWayViewModel({
@@ -156,8 +152,7 @@ class WakeWayViewModel extends ChangeNotifier {
             ?.areNotificationsEnabled() ??
         false;
 
-    locationServicesEnabled =
-        await Geolocator.isLocationServiceEnabled();
+    locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
 
     final permission = await Geolocator.checkPermission();
     locationPermissionStatus = permission.name;
@@ -204,23 +199,23 @@ class WakeWayViewModel extends ChangeNotifier {
       ..addAll(rows.map(WakeTrip.fromLocalJson));
   }
 
+  Future<void> refreshLocalTripData() async {
+    await _loadTripHistory();
+    await _loadUnfinishedTrips();
+    notifyListeners();
+  }
+
   Future<void> _loadSearchCache() async {
-    final searchCacheJson =
-        _preferences?.getString(_searchCacheKey);
+    final searchCacheJson = _preferences?.getString(_searchCacheKey);
 
     if (searchCacheJson == null) return;
 
     final cached = jsonDecode(searchCacheJson) as Map<String, dynamic>;
 
     for (final entry in cached.entries) {
-      _placeSearchCache[entry.key] =
-          (entry.value as List<dynamic>)
-              .map(
-                (item) => WakeDestination.fromJson(
-                  item as Map<String, dynamic>,
-                ),
-              )
-              .toList();
+      _placeSearchCache[entry.key] = (entry.value as List<dynamic>)
+          .map((item) => WakeDestination.fromJson(item as Map<String, dynamic>))
+          .toList();
     }
   }
 
@@ -234,29 +229,21 @@ class WakeWayViewModel extends ChangeNotifier {
     radiusMeters = values['radiusMeters'] as int? ?? radiusMeters;
 
     warningDistanceMeters =
-        values['warningDistanceMeters'] as int? ??
-        warningDistanceMeters;
+        values['warningDistanceMeters'] as int? ?? warningDistanceMeters;
 
-    vibrationEnabled =
-        values['vibration_enabled'] as bool? ?? vibrationEnabled;
+    vibrationEnabled = values['vibration_enabled'] as bool? ?? vibrationEnabled;
 
-    repeatAlarm =
-        values['repeat_alarm'] as bool? ?? repeatAlarm;
+    repeatAlarm = values['repeat_alarm'] as bool? ?? repeatAlarm;
 
-    snoozeMinutes =
-        values['snooze_minutes'] as int? ?? snoozeMinutes;
+    snoozeMinutes = values['snooze_minutes'] as int? ?? snoozeMinutes;
 
-    alarmSound =
-        values['alarm_sound'] as String? ?? alarmSound;
+    alarmSound = values['alarm_sound'] as String? ?? alarmSound;
 
-    customAlarmSoundPath =
-        values['custom_alarm_sound_path'] as String?;
+    customAlarmSoundPath = values['custom_alarm_sound_path'] as String?;
 
-    offlineMode =
-        values['offline_mode'] as bool? ?? offlineMode;
+    offlineMode = values['offline_mode'] as bool? ?? offlineMode;
 
-    useMetricUnits =
-        values['use_metric_units'] as bool? ?? useMetricUnits;
+    useMetricUnits = values['use_metric_units'] as bool? ?? useMetricUnits;
 
     batteryTipsEnabled =
         values['batteryTipsEnabled'] as bool? ?? batteryTipsEnabled;
@@ -281,9 +268,7 @@ class WakeWayViewModel extends ChangeNotifier {
 
     final nextAllowed = _nextPlaceSearchAt ?? now;
 
-    _nextPlaceSearchAt = nextAllowed.add(
-      const Duration(seconds: 1),
-    );
+    _nextPlaceSearchAt = nextAllowed.add(const Duration(seconds: 1));
 
     final wait = nextAllowed.difference(now);
 
@@ -291,68 +276,50 @@ class WakeWayViewModel extends ChangeNotifier {
       await Future<void>.delayed(wait);
     }
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 8);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
 
     try {
-      final uri = Uri.https(
-        'nominatim.openstreetmap.org',
-        '/search',
-        {
-          'q': term,
-          'format': 'jsonv2',
-          'limit': '6',
-        },
-      );
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q': term,
+        'format': 'jsonv2',
+        'limit': '6',
+      });
 
       final request = await client.getUrl(uri);
 
-      request.headers.set(
-        HttpHeaders.userAgentHeader,
-        'WakeWay/1.0 Android',
-      );
+      request.headers.set(HttpHeaders.userAgentHeader, 'WakeWay/1.0 Android');
 
-      request.headers.set(
-        HttpHeaders.acceptHeader,
-        'application/json',
-      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
 
       final response = await request.close().timeout(
         const Duration(seconds: 12),
       );
 
       if (response.statusCode != HttpStatus.ok) {
-        throw HttpException(
-          'Place search returned ${response.statusCode}.',
-        );
+        throw HttpException('Place search returned ${response.statusCode}.');
       }
 
       final body = await response.transform(utf8.decoder).join();
 
       final results = (jsonDecode(body) as List<dynamic>)
           .map(
-            (item) => WakeDestination.fromSearchResult(
-              item as Map<String, dynamic>,
-            ),
+            (item) =>
+                WakeDestination.fromSearchResult(item as Map<String, dynamic>),
           )
           .toList();
 
       _placeSearchCache[cacheKey] = results;
 
       while (_placeSearchCache.length > 50) {
-        _placeSearchCache.remove(
-          _placeSearchCache.keys.first,
-        );
+        _placeSearchCache.remove(_placeSearchCache.keys.first);
       }
 
       await _preferences?.setString(
         _searchCacheKey,
         jsonEncode(
           _placeSearchCache.map(
-            (key, places) => MapEntry(
-              key,
-              places.map((place) => place.toJson()).toList(),
-            ),
+            (key, places) =>
+                MapEntry(key, places.map((place) => place.toJson()).toList()),
           ),
         ),
       );
@@ -387,11 +354,9 @@ class WakeWayViewModel extends ChangeNotifier {
   }
 
   Future<void> refreshPermissionStatus() async {
-    locationServicesEnabled =
-        await Geolocator.isLocationServiceEnabled();
+    locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
 
-    locationPermissionStatus =
-        (await Geolocator.checkPermission()).name;
+    locationPermissionStatus = (await Geolocator.checkPermission()).name;
 
     notifyListeners();
   }
@@ -409,25 +374,19 @@ class WakeWayViewModel extends ChangeNotifier {
   }
 
   Future<void> _ensureLocationPermission() async {
-    locationServicesEnabled =
-        await Geolocator.isLocationServiceEnabled();
+    locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!locationServicesEnabled) {
       final opened = await Geolocator.openLocationSettings();
 
       if (!opened) {
-        throw StateError(
-          'Turn on device location to start a trip.',
-        );
+        throw StateError('Turn on device location to start a trip.');
       }
 
-      locationServicesEnabled =
-          await Geolocator.isLocationServiceEnabled();
+      locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
 
       if (!locationServicesEnabled) {
-        throw StateError(
-          'Turn on device location to start a trip.',
-        );
+        throw StateError('Turn on device location to start a trip.');
       }
     }
 
@@ -440,9 +399,7 @@ class WakeWayViewModel extends ChangeNotifier {
     locationPermissionStatus = permission.name;
 
     if (permission == LocationPermission.denied) {
-      throw StateError(
-        'Allow location access to monitor your trip.',
-      );
+      throw StateError('Allow location access to monitor your trip.');
     }
 
     if (permission == LocationPermission.deniedForever) {
@@ -476,17 +433,13 @@ class WakeWayViewModel extends ChangeNotifier {
     String? address,
   }) async {
     if (isMonitoring) {
-      throw StateError(
-        'A trip is already being monitored.',
-      );
+      throw StateError('A trip is already being monitored.');
     }
 
     final userId = currentUserId;
 
     if (userId == null) {
-      throw StateError(
-        'Sign in before starting a trip.',
-      );
+      throw StateError('Sign in before starting a trip.');
     }
 
     // Resolve the alarm coordinates.
@@ -499,17 +452,12 @@ class WakeWayViewModel extends ChangeNotifier {
         : (alarmLon ?? destination?.longitude);
 
     if (resolvedLat == null || resolvedLon == null) {
-      throw ArgumentError(
-        'A valid alarm location must be provided.',
-      );
+      throw ArgumentError('A valid alarm location must be provided.');
     }
 
     if (options.useAdvancePoint &&
-        (options.advanceLatitude == null ||
-            options.advanceLongitude == null)) {
-      throw ArgumentError(
-        'Select a valid advance alarm point.',
-      );
+        (options.advanceLatitude == null || options.advanceLongitude == null)) {
+      throw ArgumentError('Select a valid advance alarm point.');
     }
 
     await _ensureLocationPermission();
@@ -524,13 +472,9 @@ class WakeWayViewModel extends ChangeNotifier {
 
     final now = DateTime.now();
 
-    final tripName =
-        locationName ??
-        destination?.name ??
-        'Custom location';
+    final tripName = locationName ?? destination?.name ?? 'Custom location';
 
-    final tripAddress =
-        address ?? destination?.address;
+    final tripAddress = address ?? destination?.address;
 
     final trip = WakeTrip(
       id: _uuid.v4(),
@@ -670,8 +614,7 @@ class WakeWayViewModel extends ChangeNotifier {
             intervalDuration: const Duration(seconds: 5),
             foregroundNotificationConfig: const ForegroundNotificationConfig(
               notificationTitle: 'WakeWay is monitoring your trip',
-              notificationText:
-                  'Location is used to alert you near your stop.',
+              notificationText: 'Location is used to alert you near your stop.',
               notificationChannelName: 'Trip monitoring',
               enableWakeLock: true,
               setOngoing: true,
@@ -683,15 +626,14 @@ class WakeWayViewModel extends ChangeNotifier {
           );
 
     try {
-      _positionSubscription = Geolocator.getPositionStream(
-        locationSettings: settings,
-      ).listen(
-        _onPosition,
-        onError: (Object error) {
-          lastError = 'GPS updates stopped: $error';
-          notifyListeners();
-        },
-      );
+      _positionSubscription =
+          Geolocator.getPositionStream(locationSettings: settings).listen(
+            _onPosition,
+            onError: (Object error) {
+              lastError = 'GPS updates stopped: $error';
+              notifyListeners();
+            },
+          );
       _onPosition(position);
     } catch (error) {
       lastError = 'Could not start GPS monitoring: $error';
@@ -733,14 +675,10 @@ class WakeWayViewModel extends ChangeNotifier {
         distance > radiusMeters) {
       warningWasShown = true;
 
-      unawaited(
-        _showProximityNotification(distance),
-      );
+      unawaited(_showProximityNotification(distance));
     }
 
-    if (!alarmIsRinging &&
-        !alarmIsSnoozed &&
-        distance <= radiusMeters) {
+    if (!alarmIsRinging && !alarmIsSnoozed && distance <= radiusMeters) {
       unawaited(_ringAlarm());
     }
 
@@ -751,21 +689,17 @@ class WakeWayViewModel extends ChangeNotifier {
   // NOTIFICATIONS
   // ---------------------------------------------------------------------------
 
-  Future<void> _showProximityNotification(
-    double distance,
-  ) async {
+  Future<void> _showProximityNotification(double distance) async {
     try {
       await _notifications.show(
         id: 701,
         title: 'Your stop is getting close',
-        body:
-            '${_formatDistance(distance)} from $activeDestinationName',
+        body: '${_formatDistance(distance)} from $activeDestinationName',
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'wakeway_proximity',
             'Approaching destination',
-            channelDescription:
-                'A heads up before your WakeWay alarm point.',
+            channelDescription: 'A heads up before your WakeWay alarm point.',
             importance: Importance.high,
             priority: Priority.high,
             enableVibration: true,
@@ -773,8 +707,7 @@ class WakeWayViewModel extends ChangeNotifier {
         ),
       );
     } on Object catch (error) {
-      lastError =
-          'Could not show the proximity notification: $error';
+      lastError = 'Could not show the proximity notification: $error';
       notifyListeners();
     }
   }
@@ -802,8 +735,7 @@ class WakeWayViewModel extends ChangeNotifier {
       await _notifications.show(
         id: 702,
         title: 'WakeWay: your stop is near',
-        body:
-            'Wake up and get ready to get off at $activeDestinationName.',
+        body: 'Wake up and get ready to get off at $activeDestinationName.',
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'wakeway_alarm_v2',
@@ -816,14 +748,7 @@ class WakeWayViewModel extends ChangeNotifier {
             fullScreenIntent: false,
             enableVibration: vibrationEnabled,
             vibrationPattern: vibrationEnabled
-                ? Int64List.fromList([
-                    0,
-                    700,
-                    350,
-                    700,
-                    350,
-                    1000,
-                  ])
+                ? Int64List.fromList([0, 700, 350, 700, 350, 1000])
                 : null,
             playSound: false,
             ongoing: true,
@@ -832,8 +757,7 @@ class WakeWayViewModel extends ChangeNotifier {
         ),
       );
     } on Object catch (error) {
-      lastError =
-          'Could not show the alarm notification: $error';
+      lastError = 'Could not show the alarm notification: $error';
       notifyListeners();
     }
 
@@ -883,28 +807,22 @@ class WakeWayViewModel extends ChangeNotifier {
 
     _snoozeTimer?.cancel();
 
-    _snoozeTimer = Timer(
-      Duration(minutes: snoozeMinutes),
-      () {
-        if (isMonitoring && alarmIsSnoozed) {
-          unawaited(_ringAlarm());
-        }
-      },
-    );
+    _snoozeTimer = Timer(Duration(minutes: snoozeMinutes), () {
+      if (isMonitoring && alarmIsSnoozed) {
+        unawaited(_ringAlarm());
+      }
+    });
 
     notifyListeners();
   }
 
-  Future<void> stopAlarm() =>
-      stopTrip(alarmTriggered: true);
+  Future<void> stopAlarm() => stopTrip(alarmTriggered: true);
 
   // ---------------------------------------------------------------------------
   // STOP TRIP
   // ---------------------------------------------------------------------------
 
-  Future<void> stopTrip({
-    bool alarmTriggered = false,
-  }) async {
+  Future<void> stopTrip({bool alarmTriggered = false}) async {
     if (!isMonitoring || _activeTrip == null) return;
 
     final trip = _activeTrip!;
@@ -922,8 +840,7 @@ class WakeWayViewModel extends ChangeNotifier {
     await _notifications.cancel(id: 701);
     await _notifications.cancel(id: 702);
 
-    final triggered =
-        alarmTriggered || _alarmTriggeredInTrip;
+    final triggered = alarmTriggered || _alarmTriggeredInTrip;
 
     final now = DateTime.now();
 
@@ -1015,29 +932,23 @@ class WakeWayViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> pickDeviceMusic() =>
-      _pickCustomAlarmSound('pickDeviceMusic');
+  Future<String?> pickDeviceMusic() => _pickCustomAlarmSound('pickDeviceMusic');
 
   Future<String?> pickSystemRingtone() =>
       _pickCustomAlarmSound('pickSystemRingtone');
 
   Future<String?> _pickCustomAlarmSound(String method) async {
     if (defaultTargetPlatform != TargetPlatform.android) {
-      throw UnsupportedError(
-        'Device audio selection is available on Android.',
-      );
+      throw UnsupportedError('Device audio selection is available on Android.');
     }
 
     if (alarmIsRinging) {
-      throw StateError(
-        'Stop the active alarm before changing its sound.',
-      );
+      throw StateError('Stop the active alarm before changing its sound.');
     }
 
     final previousPath = customAlarmSoundPath;
 
-    final selection =
-        await _audioPickerChannel.invokeMapMethod<String, String>(
+    final selection = await _audioPickerChannel.invokeMapMethod<String, String>(
       method,
     );
 
@@ -1046,13 +957,8 @@ class WakeWayViewModel extends ChangeNotifier {
     final path = selection['path'];
     final name = selection['name'];
 
-    if (path == null ||
-        path.isEmpty ||
-        name == null ||
-        name.isEmpty) {
-      throw StateError(
-        'The selected audio could not be loaded.',
-      );
+    if (path == null || path.isEmpty || name == null || name.isEmpty) {
+      throw StateError('The selected audio could not be loaded.');
     }
 
     alarmSound = name;
@@ -1137,8 +1043,7 @@ class WakeWayViewModel extends ChangeNotifier {
         : '${meters.round()} m';
   }
 
-  String _formatDistance(double meters) =>
-      formatDistance(meters);
+  String _formatDistance(double meters) => formatDistance(meters);
 
   // ---------------------------------------------------------------------------
   // SAVE SETTINGS

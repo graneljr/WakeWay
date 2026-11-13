@@ -63,6 +63,16 @@ class DestinationViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshFromLocal() async {
+    try {
+      _destinations = await _repository.getDestinations();
+      _errorMessage = null;
+    } on Object catch (error) {
+      _errorMessage = _messageFor(error);
+    }
+    _notifyListeners();
+  }
+
   Future<bool> saveDestination(WakeDestination destination) =>
       _runMutation(() => _repository.saveDestination(destination));
 

@@ -13,8 +13,7 @@ class AuthenticationRepository {
   final GoogleSignIn _googleSignIn;
 
   // Replace with your Google Web OAuth Client ID.
-  static const String webClientId = '740358344602-vr4nr4ev6in3c6thdtb71ta4hno9hfqn.apps.googleusercontent.com';
-
+  static const String webClientId =  String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
   // Initialize once during application startup.
   Future<void> initializeGoogleSignIn() async {
     await _googleSignIn.initialize(
