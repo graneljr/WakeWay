@@ -45,6 +45,7 @@ app.*.map.json
 /android/app/release
 *.jks
 key.properties
+local_config.json
 
 # Widget Preview related
 .widget_preview/

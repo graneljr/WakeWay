@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:wakeway/core/storage/preferences_service.dart';
+import 'package:wakeway/features/auth/repositories/authentication_repository.dart';
+import 'package:wakeway/features/auth/viewmodels/authentication.dart';
+import 'package:wakeway/features/auth/views/login.dart';
 import 'package:wakeway/shared/components/menu_item.dart';
 import 'package:wakeway/shared/ui.dart';
 
@@ -26,7 +29,6 @@ class MoreScreen extends StatefulWidget {
   final Future<void> Function() onSync;
   final VoidCallback onCheckForUpdates;
   final bool isCheckingForUpdates;
-
   @override
   State<MoreScreen> createState() => _MoreScreenState();
 }
@@ -59,6 +61,37 @@ class _MoreScreenState extends State<MoreScreen> {
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
+  }
+
+  void _showConfirmationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Action'),
+          content: const Text('Are you sure you want to sign out?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await AuthenticationRepository().logoutAccount();
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => LoginScreen(controller: AuthenticationViewModel()),
+                  ),
+                  (route) => false,
+                );
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -101,10 +134,6 @@ class _MoreScreenState extends State<MoreScreen> {
                       ),
                     ],
                   ),
-                ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: WakeColors.muted,
                 ),
               ],
             ),
@@ -285,6 +314,18 @@ class _MoreScreenState extends State<MoreScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => _showConfirmationDialog(context),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              fixedSize: Size(MediaQuery.of(context).size.width, 50),
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              overlayColor: Colors.red.shade900,
+            ),
+            child: Text('Sign out'),
           ),
           const SizedBox(height: 23),
           Center(

@@ -26,6 +26,7 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _fade;
   Timer? _timer;
   bool _isNavigating = false;
+  bool? _hasCompletedOnboarding;
 
   @override
   void initState() {
@@ -42,7 +43,16 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
+    unawaited(_loadOnboardingStatus());
     _timer = Timer(const Duration(milliseconds: 1850), _checkSession);
+  }
+
+  Future<void> _loadOnboardingStatus() async {
+    final hasCompletedOnboarding =
+        await PreferencesService.hasCompletedOnboarding();
+    if (!mounted) return;
+
+    setState(() => _hasCompletedOnboarding = hasCompletedOnboarding);
   }
 
   Future<void> _checkSession() async {
@@ -118,17 +128,18 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 40,
-            child: Center(
-              child: TextButton(
-                onPressed: _checkSession,
-                child: const Text('Get started'),
+          if (_hasCompletedOnboarding == false)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 40,
+              child: Center(
+                child: TextButton(
+                  onPressed: _checkSession,
+                  child: const Text('Get started'),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

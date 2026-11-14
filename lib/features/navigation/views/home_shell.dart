@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:wakeway/core/database/data_sync_service.dart';
 import 'package:wakeway/core/updates/app_update_service.dart';
+import 'package:wakeway/features/auth/viewmodels/authentication.dart';
 import 'package:wakeway/features/destinations/viewmodels/destination_view_model.dart';
 import 'package:wakeway/features/destinations/views/saved_destinations_screen.dart';
 import 'package:wakeway/features/home/views/home_screen.dart';

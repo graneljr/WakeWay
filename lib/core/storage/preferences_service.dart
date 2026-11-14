@@ -40,7 +40,10 @@ class PreferencesService {
     return prefs.getString(_userIdKey);
   }
 
-  // GET USER NAME
+static Future<void> removeUserName() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove('userName');
+}
 
   // REMOVE USER ID
   static Future<void> clearUserId() async {
