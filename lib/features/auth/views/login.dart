@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:wakeway/core/storage/preferences_service.dart';
 import 'package:wakeway/features/auth/viewmodels/authentication_view_model.dart';
+import 'package:wakeway/features/auth/views/privacy_policy_screen.dart';
 import 'package:wakeway/features/navigation/views/home_shell.dart';
 import 'package:wakeway/features/wake/viewmodels/wakeway_view_model.dart';
 import 'package:wakeway/shared/ui.dart';
@@ -15,9 +19,40 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   AuthenticationViewModel get _auth => widget.controller;
+  bool _hasAcceptedPrivacyPolicy = false;
+  bool _isLoadingPrivacyPolicyAcceptance = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadPrivacyPolicyAcceptance());
+  }
+
+  Future<void> _loadPrivacyPolicyAcceptance() async {
+    final hasAccepted = await PreferencesService.hasAcceptedPrivacyPolicy();
+    if (!mounted) return;
+
+    setState(() {
+      _hasAcceptedPrivacyPolicy = hasAccepted;
+      _isLoadingPrivacyPolicyAcceptance = false;
+    });
+  }
+
+  void _setPrivacyPolicyAcceptance(bool? accepted) {
+    if (accepted == null || _isLoadingPrivacyPolicyAcceptance) return;
+
+    setState(() => _hasAcceptedPrivacyPolicy = accepted);
+    unawaited(PreferencesService.setPrivacyPolicyAccepted(accepted));
+  }
+
+  void _openPrivacyPolicy() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyScreen()),
+    );
+  }
 
   Future<void> _loginWithGoogle() async {
-    if (_auth.isLoading) return;
+    if (_auth.isLoading || !_hasAcceptedPrivacyPolicy) return;
 
     FocusScope.of(context).unfocus();
 
@@ -126,11 +161,58 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 18),
         ],
 
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: _hasAcceptedPrivacyPolicy,
+              onChanged: _isLoadingPrivacyPolicyAcceptance
+                  ? null
+                  : _setPrivacyPolicyAcceptance,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text(
+                      'I have read and agree to the ',
+                      style: TextStyle(color: WakeColors.muted, fontSize: 12),
+                    ),
+                    InkWell(
+                      onTap: _openPrivacyPolicy,
+                      borderRadius: BorderRadius.circular(4),
+                      child: const Text(
+                        'Privacy Policy',
+                        style: TextStyle(
+                          color: WakeColors.blue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
         SizedBox(
           width: double.infinity,
           height: 48,
           child: OutlinedButton(
-            onPressed: _auth.isLoading ? null : _loginWithGoogle,
+            onPressed:
+                _auth.isLoading ||
+                    _isLoadingPrivacyPolicyAcceptance ||
+                    !_hasAcceptedPrivacyPolicy
+                ? null
+                : _loginWithGoogle,
             style: OutlinedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF1F1F1F),
