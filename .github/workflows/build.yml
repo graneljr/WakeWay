@@ -83,7 +83,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          echo "Uploading WakeWay APK to release $GITHUB_REF_NAME..."
+
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release does not exist. Creating release..."
+            gh release create "$GITHUB_REF_NAME" \
+              --title "WakeWay $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
+
+          gh release upload "$GITHUB_REF_NAME" \
             build/app/outputs/flutter-apk/WakeWay-android.apk \
-            --title "WakeWay $GITHUB_REF_NAME" \
-            --generate-notes
+            --clobber
+
+          echo "APK successfully uploaded to GitHub Release!"

@@ -54,7 +54,8 @@ android {
 
     buildTypes {
         release {
-            // Local release builds remain debuggable until a release key is configured.
+           // Local release builds use debug signing when no release key is configured.
+            // Do not distribute these builds.
             // GitHub release builds provide the stable signing key through Actions secrets.
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
